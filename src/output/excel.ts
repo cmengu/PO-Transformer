@@ -85,7 +85,11 @@ function dataRow(row: TrackerRow): Row {
   ]
 }
 
-export async function excelFile(rows: TrackerRow[]): Promise<ExcelFile> {
+export function excelSheet(rows: TrackerRow[]): {
+  data: SheetData
+  columns: Array<{ width: number }>
+  fileName: string
+} {
   const header = COLUMNS.map((column) => ({
     value: column.value,
     fontWeight: 'bold' as const,
@@ -93,9 +97,15 @@ export async function excelFile(rows: TrackerRow[]): Promise<ExcelFile> {
     textColor: column.textColor,
     backgroundColor: column.backgroundColor,
   }))
-  const sheet: SheetData = [header, ...rows.map(dataRow)]
-  const blob = await writeXlsxFile(sheet, {
+  return {
+    data: [header, ...rows.map(dataRow)],
     columns: COLUMNS.map(() => ({ width: 16 })),
-  }).toBlob()
-  return { blob, fileName: fileNameFor(rows) }
+    fileName: fileNameFor(rows),
+  }
+}
+
+export async function excelFile(rows: TrackerRow[]): Promise<ExcelFile> {
+  const { data, columns, fileName } = excelSheet(rows)
+  const blob = await writeXlsxFile(data, { columns }).toBlob()
+  return { blob, fileName }
 }

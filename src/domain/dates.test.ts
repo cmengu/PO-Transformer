@@ -20,12 +20,23 @@ describe('toTrackerDate', () => {
     expect(toTrackerDate('')).toBe('')
     expect(toTrackerDate('ASAP')).toBe('')
   })
+
+  it('rejects impossible calendar dates instead of normalising them', () => {
+    expect(toTrackerDate('31/02/2026')).toBe('')
+    expect(toTrackerDate('31-FEB-2026')).toBe('')
+    expect(toTrackerDate('29-FEB-2026')).toBe('')
+    expect(toTrackerDate('29-FEB-2028')).toBe('29/02/2028')
+  })
 })
 
 describe('parseUkDate', () => {
   it('parses padded and unpadded UK dates to the same UTC day', () => {
     expect(parseUkDate('5/1/2026')?.toISOString()).toBe(parseUkDate('05/01/2026')?.toISOString())
     expect(parseUkDate('05/01/2026')?.toISOString()).toBe('2026-01-05T00:00:00.000Z')
+  })
+
+  it('does not roll invalid dates into a later month', () => {
+    expect(parseUkDate('31/02/2026')).toBeUndefined()
   })
 })
 

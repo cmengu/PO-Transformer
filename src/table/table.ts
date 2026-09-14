@@ -1,4 +1,5 @@
 import type { ReadResult, TrackerRow } from '../domain/types'
+import { requestedDate } from '../domain/dates'
 
 export type FileMessage = {
   file: string
@@ -75,8 +76,11 @@ export function editCell<K extends keyof TrackerRow>(
   const rows = table.rows.map((row, index) => {
     if (index !== rowIndex) return row
     const next: TrackerRow = { ...row, [field]: value }
-    if ((field === 'project' || field === 'rev' || field === 'requested') && value !== '' && value != null) {
+    if (field === 'project' || field === 'rev' || field === 'requested') {
+      const text = String(value ?? '')
+      const requiresReview = field === 'requested' ? requestedDate(text).flag : text.trim() === ''
       next.flags = row.flags.filter((flag) => flag !== field)
+      if (requiresReview) next.flags.push(field)
     }
     return next
   })

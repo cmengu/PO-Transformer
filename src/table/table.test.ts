@@ -89,6 +89,40 @@ describe('tracker table', () => {
     expect(table.rows[0].flags).toEqual(['requested'])
   })
 
+  it('flags a previously complete required field when it is cleared', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })]),
+    ])
+
+    const table = editCell(started, 0, 'project', '')
+
+    expect(table.rows[0].project).toBe('')
+    expect(table.rows[0].flags).toEqual(['project'])
+    expect(sheetStatus(table)).toEqual({ showSheet: true, label: '1 cell to check' })
+  })
+
+  it('keeps an invalid edited requested date flagged', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })]),
+    ])
+
+    const table = editCell(started, 0, 'requested', 'ASAP')
+
+    expect(table.rows[0].requested).toBe('ASAP')
+    expect(table.rows[0].flags).toEqual(['requested'])
+    expect(sheetStatus(table)).toEqual({ showSheet: true, label: '1 cell to check' })
+  })
+
+  it('keeps an impossible edited requested date flagged', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })]),
+    ])
+
+    const table = editCell(started, 0, 'requested', '31/02/2026')
+
+    expect(table.rows[0].flags).toEqual(['requested'])
+  })
+
   it('adds more results onto an existing table and reset clears it', () => {
     const first = addResults(createTable(), [
       rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })]),

@@ -1,0 +1,40 @@
+{
+  "file": "f5-no-rev-blank-prices.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "07/09/2026",
+      "poNumber": "4500099005",
+      "line": 10,
+      "project": "B9005-EE500",
+      "rev": "04",
+      "description": "CABLE CLIP",
+      "qty": 50,
+      "unitPrice": null,
+      "total": null,
+      "requested": "22/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "07/09/2026",
+      "poNumber": "4500099005",
+      "line": 20,
+      "project": "B9005-EE510",
+      "rev": "",
+      "description": "SPACER BLOCK",
+      "qty": 18,
+      "unitPrice": null,
+      "total": null,
+      "requested": "22/10/2026",
+      "flags": [
+        "rev"
+      ]
+    }
+  ]
+}

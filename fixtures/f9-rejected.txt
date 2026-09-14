@@ -1,0 +1,1 @@
+This file is plain text, not a PDF. It exists so a rejected drop can be tested.

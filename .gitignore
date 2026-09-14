@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.vercel/
+.env*
+.DS_Store
+*.xlsx
+# real client POs must never be committed; test fixtures live in an explicit folder
+*.pdf
+!fixtures/**/*.pdf

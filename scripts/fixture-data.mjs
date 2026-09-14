@@ -48,7 +48,8 @@ export function expectedRow(poHeader, item) {
   if (!item.project) flags.push('project');
   if (!item.rev) flags.push('rev');
   if (!item.dateRequired) flags.push('requested');
-  return {
+  const obscured = item.obscured ?? [];
+  const row = {
     job: '',
     drawing: '',
     pur: '',
@@ -59,11 +60,13 @@ export function expectedRow(poHeader, item) {
     rev: item.rev ?? '',
     description: item.partName ?? '',
     qty: item.qty ?? null,
-    unitPrice: item.unitPrice ?? null,
-    total: moneyTotal(item),
+    unitPrice: obscured.includes('unitPrice') ? null : item.unitPrice ?? null,
+    total: obscured.includes('total') ? null : moneyTotal(item),
     requested: item.dateRequired ? trackerDate(item.dateRequired) : '',
     flags,
   };
+  if (obscured.length > 0) row.obscured = obscured;
+  return row;
 }
 
 export function expectedResult(fixture) {
@@ -286,6 +289,30 @@ export const FIXTURES = [
     issue: 'not-aem',
     title: 'Invented PR-only document F11',
     variant: 'pr-only',
+  },
+  {
+    id: 'f12',
+    file: 'f12-obscured-prices.pdf',
+    kind: 'aem',
+    title: 'Invented AEM-style purchase order F12',
+    obscurePriceFields: true,
+    header: header({
+      documentNumber: '4500099012',
+      documentDate: '12-SEP-2026',
+    }),
+    items: [
+      {
+        pr: '6006501201',
+        line: 10,
+        project: 'B9012-PP120',
+        rev: '05',
+        partName: 'PRECISION LOCATING PIN',
+        dateRequired: '30-OCT-2026',
+        qty: 100,
+        unitPrice: 54,
+        obscured: ['unitPrice', 'total'],
+      },
+    ],
   },
 ];
 

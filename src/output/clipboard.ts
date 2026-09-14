@@ -1,4 +1,4 @@
-import type { ClipboardPayload, TrackerRow } from '../domain/types'
+import type { ClipboardPayload, ObscuredPriceField, TrackerRow } from '../domain/types'
 
 const HEADERS = [
   'Job#',
@@ -63,10 +63,12 @@ const HEADER_COLOURS: Array<{ background: string; color: string }> = [
 const TEXT_CELL_INDEXES = new Set([2, 3, 6, 7, 10])
 const PINK = '#FFC7CE'
 const WHITE = '#FFFFFF'
-const FLAG_INDEX: Record<'project' | 'rev' | 'requested', number> = {
+const FLAG_INDEX: Record<'project' | 'rev' | 'requested' | ObscuredPriceField, number> = {
   project: 6,
   rev: 7,
   requested: 10,
+  unitPrice: 11,
+  total: 12,
 }
 const CELL_BASE =
   'border: 1px solid #000000; padding: 4px; font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 14pt;'
@@ -86,7 +88,10 @@ function htmlTable(rows: TrackerRow[]): string {
   }).join('')
   const body = rows
     .map((row) => {
-      const flagged = new Set(row.flags.map((flag) => FLAG_INDEX[flag]))
+      const flagged = new Set([
+        ...row.flags.map((flag) => FLAG_INDEX[flag]),
+        ...(row.obscured ?? []).map((field) => FLAG_INDEX[field]),
+      ])
       const tds = rowCells(row)
         .map((value, index) => {
           const textFormat = TEXT_CELL_INDEXES.has(index) ? " mso-number-format:'\\@';" : ''

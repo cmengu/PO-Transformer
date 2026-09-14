@@ -293,6 +293,9 @@ async function buildAem(fixture) {
     regular: await doc.embedFont(StandardFonts.Helvetica),
     bold: await doc.embedFont(StandardFonts.HelveticaBold),
   };
+  const priceOverlay = fixture.obscurePriceFields
+    ? await doc.embedPng(grayPng(170, 16, 255))
+    : null;
   const pageCount = pagesPlan.length;
   pagesPlan.forEach((slices, i) => {
     const page = doc.addPage([PAGE_W, PAGE_H]);
@@ -302,6 +305,14 @@ async function buildAem(fixture) {
       y = drawItemSlice(page, fonts, fixture.header, slice.item, y, slice.from, slice.to);
     }
     if (i === pageCount - 1) drawTotals(page, fonts, fixture.items);
+    if (priceOverlay && i === 0) {
+      page.drawImage(priceOverlay, {
+        x: COL.unitPrice - 4,
+        y: FIRST_ITEM_Y - 4,
+        width: 170,
+        height: 16,
+      });
+    }
   });
   return savePdf(doc);
 }
@@ -355,8 +366,8 @@ function grayPng(width, height, fill = 210) {
   for (let y = 0; y < height; y++) {
     const row = Buffer.alloc(1 + width, fill);
     row[0] = 0;
-    if (y % 42 < 3) row.fill(186, 1);
-    if (y > 40 && y < 48) row.fill(160, 1);
+    if (fill < 255 && y % 42 < 3) row.fill(186, 1);
+    if (fill < 255 && y > 40 && y < 48) row.fill(160, 1);
     rows.push(row);
   }
   const raw = Buffer.concat(rows);

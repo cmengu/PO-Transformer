@@ -1,0 +1,26 @@
+{
+  "file": "f12-obscured-prices.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "12/09/2026",
+      "poNumber": "4500099012",
+      "line": 10,
+      "project": "B9012-PP120",
+      "rev": "05",
+      "description": "PRECISION LOCATING PIN",
+      "qty": 100,
+      "unitPrice": null,
+      "total": null,
+      "requested": "30/10/2026",
+      "flags": [],
+      "obscured": [
+        "unitPrice",
+        "total"
+      ]
+    }
+  ]
+}

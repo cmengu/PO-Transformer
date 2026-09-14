@@ -1,3 +1,5 @@
+export type ObscuredPriceField = 'unitPrice' | 'total'
+
 export type TrackerRow = {
   job: ''
   drawing: ''
@@ -13,6 +15,8 @@ export type TrackerRow = {
   total: number | null
   requested: string
   flags: Array<'project' | 'rev' | 'requested'>
+  /** Values present in the text layer but hidden by a later page image. */
+  obscured?: ObscuredPriceField[]
 }
 
 export type ReadResult =

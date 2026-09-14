@@ -1,6 +1,6 @@
 import writeXlsxFile, { type Row, type SheetData } from 'write-excel-file/universal'
 import { parseUkDate } from '../domain/dates'
-import type { ExcelFile, TrackerRow } from '../domain/types'
+import type { ExcelFile, ObscuredPriceField, TrackerRow } from '../domain/types'
 
 const RED = '#C00000'
 const YELLOW = '#FFD966'
@@ -43,16 +43,20 @@ function fileNameFor(rows: TrackerRow[]): string {
   return onlyPo ? `PO-${onlyPo}.xlsx` : `PO-rows-${todayStamp(new Date())}.xlsx`
 }
 
-function fill(row: TrackerRow, flag: 'project' | 'rev' | 'requested') {
-  return row.flags.includes(flag) ? PINK : undefined
+function fill(row: TrackerRow, field: 'project' | 'rev' | 'requested' | ObscuredPriceField) {
+  if (field === 'unitPrice' || field === 'total') {
+    return row.obscured?.includes(field) ? PINK : undefined
+  }
+  return row.flags.includes(field) ? PINK : undefined
 }
 
 function textCell(value: string, backgroundColor?: string) {
   return { type: String, value, backgroundColor }
 }
 
-function numberCell(value: number | null) {
-  return value === null ? null : { type: Number, value }
+function numberCell(value: number | null, backgroundColor?: string) {
+  if (value === null) return backgroundColor ? { backgroundColor } : null
+  return { type: Number, value, backgroundColor }
 }
 
 function dateCell(value: string, backgroundColor?: string) {
@@ -75,8 +79,8 @@ function dataRow(row: TrackerRow): Row {
     textCell(row.description),
     numberCell(row.qty),
     dateCell(row.requested, fill(row, 'requested')),
-    numberCell(row.unitPrice),
-    numberCell(row.total),
+    numberCell(row.unitPrice, fill(row, 'unitPrice')),
+    numberCell(row.total, fill(row, 'total')),
   ]
 }
 

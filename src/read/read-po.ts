@@ -1,12 +1,14 @@
 import { extractTextItems, getDocumentProxy } from 'unpdf'
+import { OPS } from 'unpdf/pdfjs'
 import { requestedDate, toTrackerDate } from '../domain/dates'
-import type { ReadResult, TrackerRow } from '../domain/types'
+import type { ObscuredPriceField, ReadResult, TrackerRow } from '../domain/types'
 
 type TextRun = {
   str: string
   x: number
   y: number
   width: number
+  height: number
 }
 
 type VisualLine = {
@@ -19,6 +21,113 @@ const PR_RE = /^\d{10}$/
 const LINE_RE = /^\d+$/
 const REV_RE = /^\d{2}$/
 
+type Matrix = [number, number, number, number, number, number]
+
+type Bounds = {
+  left: number
+  right: number
+  bottom: number
+  top: number
+}
+
+type PageVisuals = {
+  imageOverlays: Array<Bounds & { operationIndex: number }>
+  lastTextOperation: Map<string, number>
+}
+
+const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0]
+const IMAGE_OPERATIONS = new Set([
+  OPS.paintImageMaskXObject,
+  OPS.paintImageMaskXObjectGroup,
+  OPS.paintImageXObject,
+  OPS.paintInlineImageXObject,
+  OPS.paintInlineImageXObjectGroup,
+  OPS.paintImageXObjectRepeat,
+  OPS.paintImageMaskXObjectRepeat,
+  OPS.paintSolidColorImageMask,
+])
+
+function multiplyMatrices(left: Matrix, right: Matrix): Matrix {
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5],
+  ]
+}
+
+function boundsForUnitSquare(matrix: Matrix): Bounds {
+  const points = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => [
+    matrix[0] * x + matrix[2] * y + matrix[4],
+    matrix[1] * x + matrix[3] * y + matrix[5],
+  ])
+  const xs = points.map(([x]) => x)
+  const ys = points.map(([, y]) => y)
+  return {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    bottom: Math.min(...ys),
+    top: Math.max(...ys),
+  }
+}
+
+function shownText(args: unknown): string {
+  const glyphs = Array.isArray(args) ? args[0] : undefined
+  if (!Array.isArray(glyphs)) return ''
+  return glyphs
+    .map((glyph) => (
+      typeof glyph === 'object' && glyph != null && 'unicode' in glyph
+        ? String(glyph.unicode ?? '')
+        : ''
+    ))
+    .join('')
+    .trim()
+}
+
+async function readPageVisuals(pdf: Awaited<ReturnType<typeof getDocumentProxy>>, pageNumber: number): Promise<PageVisuals> {
+  const page = await pdf.getPage(pageNumber)
+  const operators = await page.getOperatorList()
+  const imageOverlays: PageVisuals['imageOverlays'] = []
+  const lastTextOperation = new Map<string, number>()
+  const transforms: Matrix[] = []
+  let transform: Matrix = [...IDENTITY]
+
+  operators.fnArray.forEach((operation, index) => {
+    const args = operators.argsArray[index]
+    if (operation === OPS.save) {
+      transforms.push([...transform])
+    } else if (operation === OPS.restore) {
+      transform = transforms.pop() ?? [...IDENTITY]
+    } else if (operation === OPS.transform) {
+      const next = Array.isArray(args) ? args : []
+      if (next.length === 6 && next.every((value) => typeof value === 'number')) {
+        transform = multiplyMatrices(transform, next as Matrix)
+      }
+    } else if (operation === OPS.showText) {
+      const text = shownText(args)
+      if (text) lastTextOperation.set(text, index)
+    } else if (IMAGE_OPERATIONS.has(operation)) {
+      imageOverlays.push({ ...boundsForUnitSquare(transform), operationIndex: index })
+    }
+  })
+
+  return { imageOverlays, lastTextOperation }
+}
+
+function isCoveredByLaterImage(run: TextRun | undefined, visuals: PageVisuals | undefined): boolean {
+  if (!run || !visuals || run.width <= 0 || run.height <= 0) return false
+  const textOperation = visuals.lastTextOperation.get(run.str)
+  if (textOperation == null) return false
+  return visuals.imageOverlays.some((overlay) => {
+    if (overlay.operationIndex <= textOperation) return false
+    const horizontal = Math.max(0, Math.min(run.x + run.width, overlay.right) - Math.max(run.x, overlay.left))
+    const vertical = Math.max(0, Math.min(run.y + run.height, overlay.top) - Math.max(run.y, overlay.bottom))
+    return horizontal / run.width >= 0.8 && vertical / run.height >= 0.8
+  })
+}
+
 function isPdf(bytes: Uint8Array): boolean {
   return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46
 }
@@ -27,8 +136,9 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
   if (!isPdf(bytes)) return { file, kind: 'issue', issue: 'not-pdf' }
 
   let items: TextRun[][]
+  let pdf: Awaited<ReturnType<typeof getDocumentProxy>>
   try {
-    const pdf = await getDocumentProxy(bytes)
+    pdf = await getDocumentProxy(bytes)
     ;({ items } = await extractTextItems(pdf))
   } catch {
     return { file, kind: 'issue', issue: 'not-pdf' }
@@ -40,6 +150,9 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
   const pages = items.map((pageItems, page) => groupLines(pageItems, page))
   const lines = pages.flat()
   const columnsByPage = pages.map(pageColumns)
+  const pageVisuals = await Promise.all(
+    pages.map((_, page) => readPageVisuals(pdf, page + 1)),
+  )
 
   const poNumber = valueRightOf(lines, 'Document Number') ?? ''
   const poDate = toTrackerDate(valueRightOf(lines, 'Document Date'))
@@ -53,7 +166,7 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
     const block = lines.slice(start, end)
     const head = lines[start]
     const cols = columnsByPage[head.page]
-    rows.push(rowFromBlock(poNumber, poDate, head, block, cols))
+    rows.push(rowFromBlock(poNumber, poDate, head, block, cols, pageVisuals[head.page]))
   }
 
   rows.sort((a, b) => a.line - b.line)
@@ -65,7 +178,13 @@ function groupLines(pageItems: TextRun[], page: number): VisualLine[] {
   for (const item of pageItems) {
     const str = item.str.trim()
     if (!str) continue
-    const run: TextRun = { str, x: item.x, y: item.y, width: item.width }
+    const run: TextRun = {
+      str,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height || 8,
+    }
     const line = lines.find((l) => Math.abs(l.y - run.y) < 2)
     if (line) line.items.push(run)
     else lines.push({ y: run.y, page, items: [run] })
@@ -127,11 +246,11 @@ function pageColumns(lines: VisualLine[]): PageColumns {
   return { quantity, uom, unitPrice, discount, amount }
 }
 
-function inCol(line: VisualLine, cols: PageColumns, start: keyof Exclude<PageColumns, null>, next?: keyof Exclude<PageColumns, null>): string | undefined {
+function inCol(line: VisualLine, cols: PageColumns, start: keyof Exclude<PageColumns, null>, next?: keyof Exclude<PageColumns, null>): TextRun | undefined {
   if (!cols) return
   const minX = cols[start] - 5
   const maxX = next ? cols[next] - 5 : Infinity
-  return line.items.find((item) => item.x >= minX && item.x < maxX)?.str
+  return line.items.find((item) => item.x >= minX && item.x < maxX)
 }
 
 function lineItemStarts(lines: VisualLine[]): number[] {
@@ -186,6 +305,7 @@ function rowFromBlock(
   head: VisualLine,
   block: VisualLine[],
   cols: PageColumns,
+  visuals: PageVisuals | undefined,
 ): TrackerRow {
   const line = Number(head.items[1]?.str)
   const project = blockText(block, 'EIN#:')
@@ -197,6 +317,12 @@ function rowFromBlock(
   if (!project) flags.push('project')
   if (!rev) flags.push('rev')
   if (requestedFlag) flags.push('requested')
+  const quantity = inCol(head, cols, 'quantity', 'uom')
+  const unitPrice = inCol(head, cols, 'unitPrice', 'discount')
+  const total = inCol(head, cols, 'amount')
+  const obscured: ObscuredPriceField[] = []
+  if (isCoveredByLaterImage(unitPrice, visuals)) obscured.push('unitPrice')
+  if (isCoveredByLaterImage(total, visuals)) obscured.push('total')
   return {
     job: '',
     drawing: '',
@@ -207,10 +333,11 @@ function rowFromBlock(
     project,
     rev,
     description,
-    qty: parseNumber(inCol(head, cols, 'quantity', 'uom')),
-    unitPrice: parseNumber(inCol(head, cols, 'unitPrice', 'discount')),
-    total: parseNumber(inCol(head, cols, 'amount')),
+    qty: parseNumber(quantity?.str),
+    unitPrice: obscured.includes('unitPrice') ? null : parseNumber(unitPrice?.str),
+    total: obscured.includes('total') ? null : parseNumber(total?.str),
     requested,
     flags,
+    ...(obscured.length > 0 ? { obscured } : {}),
   }
 }

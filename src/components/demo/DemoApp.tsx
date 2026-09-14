@@ -17,9 +17,9 @@ import {
 import { clipboardPayload } from "@/output/clipboard";
 import {
   COLUMNS,
-  FLAG_NOTE,
   LOADING_STEPS,
   cellValue,
+  flagNote,
   isFlagged,
   parseCell,
   type ColumnKey,
@@ -302,7 +302,7 @@ export function DemoApp() {
                               />
                               {flagged && (
                                 <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
-                                  {FLAG_NOTE}
+                                  {flagNote(row, col.key)}
                                 </p>
                               )}
                             </td>

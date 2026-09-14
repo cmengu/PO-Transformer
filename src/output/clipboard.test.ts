@@ -126,6 +126,22 @@ describe('clipboardPayload', () => {
     expect(tds[3]).not.toContain('#FFC7CE')
   })
 
+  it('keeps visually obscured prices blank and marks their cells pink', () => {
+    const { html, plain } = clipboardPayload([
+      {
+        ...twoPoRows[0],
+        unitPrice: null,
+        total: null,
+        obscured: ['unitPrice', 'total'],
+      },
+    ])
+    const tds = [...html.matchAll(/<td\b[^>]*>/g)].map((match) => match[0])
+
+    expect(plain).toContain('\t20/12/2026\t\t')
+    expect(tds[11]).toContain('#FFC7CE')
+    expect(tds[12]).toContain('#FFC7CE')
+  })
+
   it('puts padding, background and font on every th and td', () => {
     const { html } = clipboardPayload(twoPoRows)
     const cells = [...html.matchAll(/<(?:th|td)\b[^>]*>/g)].map((match) => match[0])

@@ -62,6 +62,26 @@ describe('tracker table', () => {
     expect(flaggedCellCount(table)).toBe(3)
   })
 
+  it('counts visually obscured prices as cells to check until edited', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [
+        row({
+          poNumber: '4500011111',
+          line: 10,
+          unitPrice: null,
+          total: null,
+          obscured: ['unitPrice', 'total'],
+        }),
+      ]),
+    ])
+
+    expect(sheetStatus(started)).toEqual({ showSheet: true, label: '2 cells to check' })
+
+    const corrected = editCell(started, 0, 'unitPrice', 12.5)
+    expect(corrected.rows[0]).toMatchObject({ unitPrice: 12.5, obscured: ['total'] })
+    expect(sheetStatus(corrected)).toEqual({ showSheet: true, label: '1 cell to check' })
+  })
+
   it('updates an edited cell and clears that field flag when the value is non-empty', () => {
     const started = addResults(createTable(), [
       rowsResult('a.pdf', [

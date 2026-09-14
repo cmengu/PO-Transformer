@@ -129,4 +129,21 @@ describe('excelFile', () => {
 
     expect(styles).toContain('FFC7CE')
   })
+
+  it('keeps visually obscured prices blank and fills them pink', async () => {
+    const { blob } = await excelFile([
+      {
+        ...onePoRow,
+        unitPrice: null,
+        total: null,
+        obscured: ['unitPrice', 'total'],
+      },
+    ])
+    const { sheet, styles, strings } = await unzipXlsx(blob)
+
+    expect(styles).toContain('FFC7CE')
+    expect(sheet).toMatch(/<c r="L2"[^>]*\/>/)
+    expect(sheet).toMatch(/<c r="M2"[^>]*\/>/)
+    expect(strings).not.toContain('12.5')
+  })
 })

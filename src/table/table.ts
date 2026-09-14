@@ -43,7 +43,7 @@ export function addResults(table: TrackerTable, results: ReadResult[]): TrackerT
 }
 
 export function flaggedCellCount(table: TrackerTable): number {
-  return table.rows.reduce((n, row) => n + row.flags.length, 0)
+  return table.rows.reduce((n, row) => n + row.flags.length + (row.obscured?.length ?? 0), 0)
 }
 
 export function sheetStatus(table: TrackerTable): {
@@ -81,6 +81,11 @@ export function editCell<K extends keyof TrackerRow>(
       const requiresReview = field === 'requested' ? requestedDate(text).flag : text.trim() === ''
       next.flags = row.flags.filter((flag) => flag !== field)
       if (requiresReview) next.flags.push(field)
+    }
+    if ((field === 'unitPrice' || field === 'total') && row.obscured?.includes(field)) {
+      const obscured = row.obscured.filter((value) => value !== field)
+      if (obscured.length > 0) next.obscured = obscured
+      else delete next.obscured
     }
     return next
   })

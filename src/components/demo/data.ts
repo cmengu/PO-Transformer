@@ -1,4 +1,4 @@
-import type { TrackerRow } from "@/domain/types";
+import type { ObscuredPriceField, TrackerRow } from "@/domain/types";
 
 export const COLUMNS = [
   { key: "job", label: "Job#", headerBg: "#FFD966", headerFg: "#C00000" },
@@ -55,6 +55,7 @@ export const LOADING_STEPS = [
 ] as const;
 
 export const FLAG_NOTE = "Not found on PO — please check";
+const OBSCURED_NOTE = "Visually obscured in PDF — not imported";
 
 export function cellValue(row: TrackerRow, key: ColumnKey): string {
   const value = row[key];
@@ -63,10 +64,19 @@ export function cellValue(row: TrackerRow, key: ColumnKey): string {
 }
 
 export function isFlagged(row: TrackerRow, key: ColumnKey): boolean {
+  if (key === "project" || key === "rev" || key === "requested") {
+    return row.flags.includes(key);
+  }
   return (
-    (key === "project" || key === "rev" || key === "requested") &&
-    row.flags.includes(key)
+    (key === "unitPrice" || key === "total") &&
+    row.obscured?.includes(key as ObscuredPriceField) === true
   );
+}
+
+export function flagNote(row: TrackerRow, key: ColumnKey): string {
+  return row.obscured?.includes(key as ObscuredPriceField)
+    ? OBSCURED_NOTE
+    : FLAG_NOTE;
 }
 
 export function parseCell(key: ColumnKey, value: string): TrackerRow[ColumnKey] {

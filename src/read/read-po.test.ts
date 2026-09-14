@@ -46,6 +46,29 @@ describe('readPo', () => {
     expect(result).toEqual(fixtureManifest(file))
   })
 
+  it('keeps visible prices from f2-one-line.pdf', async () => {
+    const file = 'f2-one-line.pdf'
+    const result = await readPo(file, fixtureBytes(file))
+    expect(result).toEqual(fixtureManifest(file))
+    if (result.kind === 'rows') {
+      expect(result.rows[0]).toMatchObject({ unitPrice: 140, total: 1120 })
+      expect(result.rows[0].obscured).toBeUndefined()
+    }
+  })
+
+  it('does not import text-layer prices hidden by a later image overlay', async () => {
+    const file = 'f12-obscured-prices.pdf'
+    const result = await readPo(file, fixtureBytes(file))
+    expect(result).toEqual(fixtureManifest(file))
+    if (result.kind === 'rows') {
+      expect(result.rows[0]).toMatchObject({
+        unitPrice: null,
+        total: null,
+        obscured: ['unitPrice', 'total'],
+      })
+    }
+  })
+
   it('rejects a document header without any valid line items', async () => {
     const file = 'f10-header-only.pdf'
     const result = await readPo(file, fixtureBytes(file))

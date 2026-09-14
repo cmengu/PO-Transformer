@@ -69,6 +69,19 @@ describe('readPo', () => {
     }
   })
 
+  it('does not import text-layer prices hidden by a later vector fill', async () => {
+    const file = 'f13-vector-obscured-prices.pdf'
+    const result = await readPo(file, fixtureBytes(file))
+    expect(result).toEqual(fixtureManifest(file))
+    if (result.kind === 'rows') {
+      expect(result.rows[0]).toMatchObject({
+        unitPrice: null,
+        total: null,
+        obscured: ['unitPrice', 'total'],
+      })
+    }
+  })
+
   it('rejects a document header without any valid line items', async () => {
     const file = 'f10-header-only.pdf'
     const result = await readPo(file, fixtureBytes(file))

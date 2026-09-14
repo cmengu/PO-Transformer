@@ -33,6 +33,7 @@ type Bounds = {
 
 type PageVisuals = {
   imageOverlays: Array<Bounds & { operationIndex: number }>
+  vectorOverlays: Array<Bounds & { operationIndex: number }>
   lastTextOperation: Map<string, number>
 }
 
@@ -74,6 +75,47 @@ function boundsForUnitSquare(matrix: Matrix): Bounds {
   }
 }
 
+function boundsForRect(matrix: Matrix, rectangle: ArrayLike<number>): Bounds | undefined {
+  if (rectangle.length < 4) return undefined
+  const [left, bottom, right, top] = [rectangle[0], rectangle[1], rectangle[2], rectangle[3]]
+  if (![left, bottom, right, top].every((value) => typeof value === 'number' && Number.isFinite(value))) return undefined
+  const points = [[left, bottom], [right, bottom], [left, top], [right, top]].map(([x, y]) => [
+    matrix[0] * x + matrix[2] * y + matrix[4],
+    matrix[1] * x + matrix[3] * y + matrix[5],
+  ])
+  const xs = points.map(([x]) => x)
+  const ys = points.map(([, y]) => y)
+  return {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    bottom: Math.min(...ys),
+    top: Math.max(...ys),
+  }
+}
+
+function boundsForRectangleOperation(matrix: Matrix, args: ArrayLike<number>): Bounds | undefined {
+  if (args.length < 4) return undefined
+  return boundsForRect(matrix, [args[0], args[1], args[0] + args[2], args[1] + args[3]])
+}
+
+function isWhiteFill(value: unknown): boolean {
+  if (typeof value === 'string') return value.toLowerCase() === '#ffffff'
+  return typeof value === 'number' && value >= 0.999
+    || Array.isArray(value) && value.length >= 3 && value.every((component) => typeof component === 'number') && (
+      (value.length === 3 && value.every((component) => component >= 0.999)) ||
+      (value.length >= 4 && value.slice(0, 4).every((component) => component <= 0.001))
+    )
+}
+
+const VECTOR_FILL_OPERATIONS = new Set([
+  OPS.fill,
+  OPS.eoFill,
+  OPS.fillStroke,
+  OPS.eoFillStroke,
+  OPS.closeFillStroke,
+  OPS.closeEOFillStroke,
+])
+
 function shownText(args: unknown): string {
   const glyphs = Array.isArray(args) ? args[0] : undefined
   if (!Array.isArray(glyphs)) return ''
@@ -91,16 +133,22 @@ async function readPageVisuals(pdf: Awaited<ReturnType<typeof getDocumentProxy>>
   const page = await pdf.getPage(pageNumber)
   const operators = await page.getOperatorList()
   const imageOverlays: PageVisuals['imageOverlays'] = []
+  const vectorOverlays: PageVisuals['vectorOverlays'] = []
   const lastTextOperation = new Map<string, number>()
   const transforms: Matrix[] = []
+  const fills: unknown[] = []
   let transform: Matrix = [...IDENTITY]
+  let fillColor: unknown
+  let pendingPathBounds: Bounds | undefined
 
   operators.fnArray.forEach((operation, index) => {
     const args = operators.argsArray[index]
     if (operation === OPS.save) {
       transforms.push([...transform])
+      fills.push(fillColor)
     } else if (operation === OPS.restore) {
       transform = transforms.pop() ?? [...IDENTITY]
+      fillColor = fills.pop()
     } else if (operation === OPS.transform) {
       const next = Array.isArray(args) ? args : []
       if (next.length === 6 && next.every((value) => typeof value === 'number')) {
@@ -109,19 +157,41 @@ async function readPageVisuals(pdf: Awaited<ReturnType<typeof getDocumentProxy>>
     } else if (operation === OPS.showText) {
       const text = shownText(args)
       if (text) lastTextOperation.set(text, index)
+    } else if (operation === OPS.setFillRGBColor || operation === OPS.setFillGray || operation === OPS.setFillCMYKColor) {
+      fillColor = Array.isArray(args)
+        ? operation === OPS.setFillCMYKColor ? args : args[0]
+        : undefined
+    } else if (operation === OPS.rectangle) {
+      pendingPathBounds = Array.isArray(args) ? boundsForRectangleOperation(transform, args as ArrayLike<number>) : undefined
+    } else if (operation === OPS.constructPath) {
+      const pathOperation = Array.isArray(args) ? args[0] : undefined
+      const pathBounds = Array.isArray(args) && args[2] != null && typeof args[2] === 'object'
+        ? boundsForRect(transform, args[2] as ArrayLike<number>)
+        : undefined
+      if (VECTOR_FILL_OPERATIONS.has(pathOperation as number) && isWhiteFill(fillColor) && pathBounds) {
+        vectorOverlays.push({ ...pathBounds, operationIndex: index })
+      }
+      pendingPathBounds = undefined
+    } else if (VECTOR_FILL_OPERATIONS.has(operation)) {
+      if (isWhiteFill(fillColor) && pendingPathBounds) {
+        vectorOverlays.push({ ...pendingPathBounds, operationIndex: index })
+      }
+      pendingPathBounds = undefined
+    } else if (operation === OPS.stroke || operation === OPS.closeStroke || operation === OPS.endPath) {
+      pendingPathBounds = undefined
     } else if (IMAGE_OPERATIONS.has(operation)) {
       imageOverlays.push({ ...boundsForUnitSquare(transform), operationIndex: index })
     }
   })
 
-  return { imageOverlays, lastTextOperation }
+  return { imageOverlays, vectorOverlays, lastTextOperation }
 }
 
-function isCoveredByLaterImage(run: TextRun | undefined, visuals: PageVisuals | undefined): boolean {
+function isCoveredByLaterOverlay(run: TextRun | undefined, visuals: PageVisuals | undefined): boolean {
   if (!run || !visuals || run.width <= 0 || run.height <= 0) return false
   const textOperation = visuals.lastTextOperation.get(run.str)
   if (textOperation == null) return false
-  return visuals.imageOverlays.some((overlay) => {
+  return [...visuals.imageOverlays, ...visuals.vectorOverlays].some((overlay) => {
     if (overlay.operationIndex <= textOperation) return false
     const horizontal = Math.max(0, Math.min(run.x + run.width, overlay.right) - Math.max(run.x, overlay.left))
     const vertical = Math.max(0, Math.min(run.y + run.height, overlay.top) - Math.max(run.y, overlay.bottom))
@@ -325,8 +395,8 @@ function rowFromBlock(
   const dateIssues: NonNullable<TrackerRow['dateIssues']> = {}
   if (poDate.issue) dateIssues.poDate = { kind: poDate.issue, ...(poDate.raw ? { raw: poDate.raw } : {}) }
   if (requested.issue) dateIssues.requested = { kind: requested.issue, ...(requested.raw ? { raw: requested.raw } : {}) }
-  if (isCoveredByLaterImage(unitPrice, visuals)) obscured.push('unitPrice')
-  if (isCoveredByLaterImage(total, visuals)) obscured.push('total')
+  if (isCoveredByLaterOverlay(unitPrice, visuals)) obscured.push('unitPrice')
+  if (isCoveredByLaterOverlay(total, visuals)) obscured.push('total')
   return {
     job: '',
     drawing: '',

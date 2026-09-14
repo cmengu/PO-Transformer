@@ -1,0 +1,26 @@
+{
+  "file": "f13-vector-obscured-prices.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "13/09/2026",
+      "poNumber": "4500099013",
+      "line": 10,
+      "project": "B9013-VV130",
+      "rev": "06",
+      "description": "PRECISION CLAMP BODY",
+      "qty": 40,
+      "unitPrice": null,
+      "total": null,
+      "requested": "31/10/2026",
+      "flags": [],
+      "obscured": [
+        "unitPrice",
+        "total"
+      ]
+    }
+  ]
+}

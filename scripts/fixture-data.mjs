@@ -315,6 +315,30 @@ export const FIXTURES = [
       },
     ],
   },
+  {
+    id: 'f13',
+    file: 'f13-vector-obscured-prices.pdf',
+    kind: 'aem',
+    title: 'Invented AEM-style purchase order F13',
+    vectorObscurePriceFields: true,
+    header: header({
+      documentNumber: '4500099013',
+      documentDate: '13-SEP-2026',
+    }),
+    items: [
+      {
+        pr: '6006501301',
+        line: 10,
+        project: 'B9013-VV130',
+        rev: '06',
+        partName: 'PRECISION CLAMP BODY',
+        dateRequired: '31-OCT-2026',
+        qty: 40,
+        unitPrice: 42.5,
+        obscured: ['unitPrice', 'total'],
+      },
+    ],
+  },
 ];
 
 function item(pr, line, project, rev, partName, dateRequired, qty, unitPrice) {

@@ -313,6 +313,15 @@ async function buildAem(fixture) {
         height: 16,
       });
     }
+    if (fixture.vectorObscurePriceFields && i === 0) {
+      page.drawRectangle({
+        x: COL.unitPrice - 4,
+        y: FIRST_ITEM_Y - 4,
+        width: 170,
+        height: 16,
+        color: rgb(1, 1, 1),
+      });
+    }
   });
   return savePdf(doc);
 }

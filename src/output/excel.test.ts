@@ -97,6 +97,24 @@ describe('excelFile', () => {
     expect(sheet).not.toMatch(/<c r="K2"[^>]*t="s"/)
   })
 
+  it('stores an unpadded edited date 5/1/2026 as a real Excel date', async () => {
+    const { blob } = await excelFile([{ ...onePoRow, requested: '5/1/2026' }])
+    const { sheet, styles } = await unzipXlsx(blob)
+    const requested = sheet.match(/<c r="K2"[^>]*>([\s\S]*?)<\/c>/)?.[1]
+
+    expect(styles).toContain('dd/mm/yyyy')
+    expect(requested).toContain('<v>')
+    expect(sheet).not.toMatch(/<c r="K2"[^>]*t="s"/)
+  })
+
+  it('keeps an unparseable edited date as text instead of dropping it', async () => {
+    const { blob } = await excelFile([{ ...onePoRow, requested: 'ASAP' }])
+    const { strings, sheet } = await unzipXlsx(blob)
+
+    expect(strings).toMatch(/<t[^>]*>ASAP<\/t>/)
+    expect(sheet).toMatch(/<c r="K2"[^>]*t="s"/)
+  })
+
   it('fills flagged cells pink', async () => {
     const { blob } = await excelFile([
       {

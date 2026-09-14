@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * Locked look: Quiet studio (variant A). Losing variants live on branch prototype/demo-look.
- * Dropped PDFs are read in the browser via readPo; nothing is uploaded.
+ * Quiet studio look. PDFs are read in the browser via readPo; nothing is uploaded.
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { ReadResult } from "@/domain/types";
+import type { ReadResult, TrackerRow } from "@/domain/types";
 import type { TrackerTable } from "@/table/table";
 import {
   addResults,
@@ -36,7 +35,8 @@ export function DemoApp() {
   const [table, setTable] = useState<TrackerTable>(createTable);
   const [dragOver, setDragOver] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [stepIndex, setStepIndex] = useState(0);
+  const [timerStep, setTimerStep] = useState(0);
+  const [readStep, setReadStep] = useState(0);
   const [fileIndex, setFileIndex] = useState(1);
   const [fileCount, setFileCount] = useState(1);
 
@@ -45,9 +45,9 @@ export function DemoApp() {
     const started = Date.now();
     const timer = window.setInterval(() => {
       const elapsed = Date.now() - started;
-      if (elapsed < 1400) setStepIndex(0);
-      else if (elapsed < 2800) setStepIndex(1);
-      else setStepIndex(2);
+      if (elapsed < 1400) setTimerStep(0);
+      else if (elapsed < 2800) setTimerStep(1);
+      else setTimerStep(2);
     }, 200);
     return () => window.clearInterval(timer);
   }, [scene]);
@@ -59,12 +59,22 @@ export function DemoApp() {
   }, [toast]);
 
   const { showSheet, label } = sheetStatus(table);
-  const stepLabel = LOADING_STEPS[stepIndex] ?? LOADING_STEPS[0];
+  const stepLabel = LOADING_STEPS[Math.max(timerStep, readStep)] ?? LOADING_STEPS[0];
+
+  function pickFiles() {
+    fileInputRef.current?.click();
+  }
+
+  function startOver() {
+    setTable(resetTable());
+    setScene("empty");
+  }
 
   async function processFiles(fileList: File[]) {
     if (fileList.length === 0) return;
     setDragOver(false);
-    setStepIndex(0);
+    setTimerStep(0);
+    setReadStep(0);
     setFileIndex(1);
     setFileCount(fileList.length);
     setScene("loading");
@@ -80,6 +90,7 @@ export function DemoApp() {
       const results: ReadResult[] = [];
       for (let i = 0; i < fileList.length; i++) {
         setFileIndex(i + 1);
+        setReadStep(Math.min(2, Math.floor(((i + 1) / fileList.length) * 3)));
         const file = fileList[i];
         try {
           const bytes = new Uint8Array(await file.arrayBuffer());
@@ -98,8 +109,9 @@ export function DemoApp() {
   }
 
   function onEdit(rowIndex: number, key: ColumnKey, value: string) {
+    const parsed = parseCell(key, value);
     setTable((current) =>
-      editCell(current, rowIndex, key, parseCell(key, value) as never),
+      editCell(current, rowIndex, key, parsed as TrackerRow[typeof key]),
     );
   }
 
@@ -124,8 +136,59 @@ export function DemoApp() {
     );
   }
 
+  const actions = (
+    <div className="flex flex-wrap gap-2">
+      {showSheet && (
+        <>
+          <button
+            type="button"
+            onClick={onCopy}
+            className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
+          >
+            Copy table
+          </button>
+          <button
+            type="button"
+            onClick={onDownload}
+            className="rounded-full border border-[#1c1917] px-4 py-2 text-sm"
+          >
+            Download Excel
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        onClick={pickFiles}
+        className={`rounded-full px-4 py-2 text-sm ${
+          showSheet ? "text-[#5c564e]" : "bg-[#1c1917] text-white"
+        }`}
+      >
+        Add more POs
+      </button>
+      <button
+        type="button"
+        onClick={startOver}
+        className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
+      >
+        Start over
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#f4efe6] px-6 pb-16 pt-12 text-[#1c1917]">
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="application/pdf,.pdf"
+        className="hidden"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          void processFiles(files);
+        }}
+      />
       <header className="mx-auto mb-10 max-w-3xl text-center">
         <p className="text-xs tracking-[0.25em] uppercase text-[#7c746a]">
           PO Transformer
@@ -139,44 +202,30 @@ export function DemoApp() {
       </header>
 
       {scene === "empty" && (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="application/pdf,.pdf"
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              e.target.value = "";
-              void processFiles(files);
-            }}
-          />
-          <button
-            type="button"
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              void processFiles(Array.from(e.dataTransfer.files));
-            }}
-            onClick={() => fileInputRef.current?.click()}
-            className={`mx-auto flex min-h-72 w-full max-w-3xl flex-col items-center justify-center rounded-[2.5rem] border-2 border-dashed px-8 text-center transition ${
-              dragOver
-                ? "border-[#1c1917] bg-[#ece4d6]"
-                : "border-[#c4b8a6] bg-[#faf6ef]"
-            }`}
-          >
-            <span className="font-serif text-2xl">Drop AEM purchase orders here</span>
-            <span className="mt-3 max-w-sm text-sm text-[#5c564e]">
-              files stay on your computer — or click to browse
-            </span>
-          </button>
-        </>
+        <button
+          type="button"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            void processFiles(Array.from(e.dataTransfer.files));
+          }}
+          onClick={pickFiles}
+          className={`mx-auto flex min-h-72 w-full max-w-3xl flex-col items-center justify-center rounded-[2.5rem] border-2 border-dashed px-8 text-center transition ${
+            dragOver
+              ? "border-[#1c1917] bg-[#ece4d6]"
+              : "border-[#c4b8a6] bg-[#faf6ef]"
+          }`}
+        >
+          <span className="font-serif text-2xl">Drop AEM purchase orders here</span>
+          <span className="mt-3 max-w-sm text-sm text-[#5c564e]">
+            files stay on your computer — or click to browse
+          </span>
+        </button>
       )}
 
       {scene === "loading" && (
@@ -210,39 +259,7 @@ export function DemoApp() {
             <div className="overflow-hidden rounded-[1.5rem] bg-[#faf6ef] shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                 <p className="text-sm">{label}</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={onCopy}
-                    className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
-                  >
-                    Copy table
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onDownload}
-                    className="rounded-full border border-[#1c1917] px-4 py-2 text-sm"
-                  >
-                    Download Excel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScene("empty")}
-                    className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
-                  >
-                    Add more POs
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTable(resetTable());
-                      setScene("empty");
-                    }}
-                    className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
-                  >
-                    Start over
-                  </button>
-                </div>
+                {actions}
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-max border-separate border-spacing-0 text-sm">
@@ -264,7 +281,7 @@ export function DemoApp() {
                   </thead>
                   <tbody>
                     {table.rows.map((row, rowIndex) => (
-                      <tr key={`${row.poNumber}-${row.line}`}>
+                      <tr key={rowIndex}>
                         {COLUMNS.map((col) => {
                           const flagged = isFlagged(row, col.key);
                           return (
@@ -281,7 +298,7 @@ export function DemoApp() {
                                   onEdit(rowIndex, col.key, e.target.value)
                                 }
                                 className="w-36 bg-transparent px-3 py-2 outline-none"
-                                aria-label={`${col.label} line ${row.line}`}
+                                aria-label={`${col.label} row ${rowIndex + 1}`}
                               />
                               {flagged && (
                                 <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
@@ -299,27 +316,7 @@ export function DemoApp() {
             </div>
           )}
 
-          {!showSheet && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setScene("empty")}
-                className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
-              >
-                Add more POs
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTable(resetTable());
-                  setScene("empty");
-                }}
-                className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
-              >
-                Start over
-              </button>
-            </div>
-          )}
+          {!showSheet && actions}
         </div>
       )}
 

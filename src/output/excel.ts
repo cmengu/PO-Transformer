@@ -1,4 +1,5 @@
 import writeXlsxFile, { type Row, type SheetData } from 'write-excel-file/universal'
+import { parseUkDate } from '../domain/dates'
 import type { ExcelFile, TrackerRow } from '../domain/types'
 
 const RED = '#C00000'
@@ -42,13 +43,6 @@ function fileNameFor(rows: TrackerRow[]): string {
   return onlyPo ? `PO-${onlyPo}.xlsx` : `PO-rows-${todayStamp(new Date())}.xlsx`
 }
 
-function parseUkDate(value: string): Date | undefined {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value)
-  if (!match) return undefined
-  const [, day, month, year] = match
-  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)))
-}
-
 function fill(row: TrackerRow, flag: 'project' | 'rev' | 'requested') {
   return row.flags.includes(flag) ? PINK : undefined
 }
@@ -63,8 +57,9 @@ function numberCell(value: number | null) {
 
 function dateCell(value: string, backgroundColor?: string) {
   const date = parseUkDate(value)
-  if (!date) return backgroundColor ? { backgroundColor } : null
-  return { type: Date, value: date, format: 'dd/mm/yyyy', backgroundColor }
+  if (date) return { type: Date, value: date, format: 'dd/mm/yyyy', backgroundColor }
+  if (value) return textCell(value, backgroundColor)
+  return backgroundColor ? { backgroundColor } : null
 }
 
 function dataRow(row: TrackerRow): Row {

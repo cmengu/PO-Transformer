@@ -1,4 +1,5 @@
 import { extractTextItems, getDocumentProxy } from 'unpdf'
+import { requestedDate, toTrackerDate } from '../domain/dates'
 import type { ReadResult, TrackerRow } from '../domain/types'
 
 type TextRun = {
@@ -14,21 +15,6 @@ type VisualLine = {
   items: TextRun[]
 }
 
-const MONTHS: Record<string, string> = {
-  JAN: '01',
-  FEB: '02',
-  MAR: '03',
-  APR: '04',
-  MAY: '05',
-  JUN: '06',
-  JUL: '07',
-  AUG: '08',
-  SEP: '09',
-  OCT: '10',
-  NOV: '11',
-  DEC: '12',
-}
-
 const PR_RE = /^\d{10}$/
 const REV_RE = /^\d{2}$/
 
@@ -39,7 +25,7 @@ function isPdf(bytes: Uint8Array): boolean {
 export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResult> {
   if (!isPdf(bytes)) return { file, kind: 'issue', issue: 'not-pdf' }
 
-  let items: Array<Array<{ str: string; x: number; y: number; width: number }>>
+  let items: TextRun[][]
   try {
     const pdf = await getDocumentProxy(bytes)
     ;({ items } = await extractTextItems(pdf))
@@ -73,7 +59,7 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
   return { file, kind: 'rows', rows }
 }
 
-function groupLines(pageItems: Array<{ str: string; x: number; y: number; width: number }>, page: number): VisualLine[] {
+function groupLines(pageItems: TextRun[], page: number): VisualLine[] {
   const lines: VisualLine[] = []
   for (const item of pageItems) {
     const str = item.str.trim()
@@ -111,14 +97,6 @@ function valueRightOf(lines: VisualLine[], label: string): string | undefined {
 
 function escapeRe(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function toTrackerDate(value: string | undefined): string {
-  if (!value) return ''
-  const match = /^(\d{2})-([A-Z]{3})-(\d{4})$/.exec(value)
-  if (!match) return ''
-  const month = MONTHS[match[2]]
-  return month ? `${match[1]}/${month}/${match[3]}` : ''
 }
 
 function parseNumber(value: string | undefined): number | null {
@@ -212,11 +190,11 @@ function rowFromBlock(
   const rev = blockRev(block)
   const description = blockText(block, 'Part Name:')
   const requestedRaw = blockText(block, 'Date Required:')
-  const requested = toTrackerDate(requestedRaw) || (requestedRaw ? requestedRaw : '')
+  const { value: requested, flag: requestedFlag } = requestedDate(requestedRaw)
   const flags: TrackerRow['flags'] = []
   if (!project) flags.push('project')
   if (!rev) flags.push('rev')
-  if (!requested) flags.push('requested')
+  if (requestedFlag) flags.push('requested')
   return {
     job: '',
     drawing: '',

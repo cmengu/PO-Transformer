@@ -1,4 +1,4 @@
-import type { ObscuredPriceField, TrackerRow } from "@/domain/types";
+import type { DateField, ObscuredPriceField, TrackerRow } from "@/domain/types";
 
 export const COLUMNS = [
   { key: "job", label: "Job#", headerBg: "#FFD966", headerFg: "#C00000" },
@@ -64,7 +64,13 @@ export function cellValue(row: TrackerRow, key: ColumnKey): string {
 }
 
 export function isFlagged(row: TrackerRow, key: ColumnKey): boolean {
-  if (key === "project" || key === "rev" || key === "requested") {
+  if (key === "poDate" || key === "requested") {
+    return (
+      row.dateIssues?.[key as DateField] !== undefined ||
+      (key === "requested" && row.flags.includes(key))
+    );
+  }
+  if (key === "project" || key === "rev") {
     return row.flags.includes(key);
   }
   return (
@@ -74,6 +80,13 @@ export function isFlagged(row: TrackerRow, key: ColumnKey): boolean {
 }
 
 export function flagNote(row: TrackerRow, key: ColumnKey): string {
+  if (key === "poDate" || key === "requested") {
+    const issue = row.dateIssues?.[key as DateField];
+    if (issue?.kind === "invalid") {
+      return `Invalid date${issue.raw ? `: ${issue.raw}` : ""} — enter DD/MM/YYYY`;
+    }
+    if (issue?.kind === "missing") return "Date unavailable — please check PO";
+  }
   return row.obscured?.includes(key as ObscuredPriceField)
     ? OBSCURED_NOTE
     : FLAG_NOTE;

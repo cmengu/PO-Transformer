@@ -1,6 +1,7 @@
 import { extractTextItems, getDocumentProxy } from 'unpdf'
 import { OPS } from 'unpdf/pdfjs'
-import { requestedDate, toTrackerDate } from '../domain/dates'
+import { parseDateField } from '../domain/dates'
+import type { ParsedDateField } from '../domain/dates'
 import type { ObscuredPriceField, ReadResult, TrackerRow } from '../domain/types'
 
 type TextRun = {
@@ -155,7 +156,7 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
   )
 
   const poNumber = valueRightOf(lines, 'Document Number') ?? ''
-  const poDate = toTrackerDate(valueRightOf(lines, 'Document Date'))
+  const poDate = parseDateField(valueRightOf(lines, 'Document Date'))
   const starts = lineItemStarts(lines)
   if (!poNumber || starts.length === 0) return { file, kind: 'issue', issue: 'not-aem' }
 
@@ -301,7 +302,7 @@ function blockRev(block: VisualLine[]): string {
 
 function rowFromBlock(
   poNumber: string,
-  poDate: string,
+  poDate: ParsedDateField,
   head: VisualLine,
   block: VisualLine[],
   cols: PageColumns,
@@ -312,22 +313,25 @@ function rowFromBlock(
   const rev = blockRev(block)
   const description = blockText(block, 'Part Name:')
   const requestedRaw = blockText(block, 'Date Required:')
-  const { value: requested, flag: requestedFlag } = requestedDate(requestedRaw)
+  const requested = parseDateField(requestedRaw)
   const flags: TrackerRow['flags'] = []
   if (!project) flags.push('project')
   if (!rev) flags.push('rev')
-  if (requestedFlag) flags.push('requested')
+  if (requested.issue) flags.push('requested')
   const quantity = inCol(head, cols, 'quantity', 'uom')
   const unitPrice = inCol(head, cols, 'unitPrice', 'discount')
   const total = inCol(head, cols, 'amount')
   const obscured: ObscuredPriceField[] = []
+  const dateIssues: NonNullable<TrackerRow['dateIssues']> = {}
+  if (poDate.issue) dateIssues.poDate = { kind: poDate.issue, ...(poDate.raw ? { raw: poDate.raw } : {}) }
+  if (requested.issue) dateIssues.requested = { kind: requested.issue, ...(requested.raw ? { raw: requested.raw } : {}) }
   if (isCoveredByLaterImage(unitPrice, visuals)) obscured.push('unitPrice')
   if (isCoveredByLaterImage(total, visuals)) obscured.push('total')
   return {
     job: '',
     drawing: '',
     pur: '',
-    poDate,
+    poDate: poDate.value,
     poNumber,
     line,
     project,
@@ -336,8 +340,9 @@ function rowFromBlock(
     qty: parseNumber(quantity?.str),
     unitPrice: obscured.includes('unitPrice') ? null : parseNumber(unitPrice?.str),
     total: obscured.includes('total') ? null : parseNumber(total?.str),
-    requested,
+    requested: requested.value,
     flags,
     ...(obscured.length > 0 ? { obscured } : {}),
+    ...(Object.keys(dateIssues).length > 0 ? { dateIssues } : {}),
   }
 }

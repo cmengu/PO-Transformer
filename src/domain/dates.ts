@@ -17,6 +17,12 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0')
 }
 
+export type ParsedDateField = {
+  value: string
+  issue?: 'missing' | 'invalid'
+  raw?: string
+}
+
 function isCalendarDate(day: number, month: number, year: number): boolean {
   const value = new Date(Date.UTC(year, month - 1, day))
   return value.getUTCFullYear() === year && value.getUTCMonth() === month - 1 && value.getUTCDate() === day
@@ -48,8 +54,15 @@ export function parseUkDate(value: string): Date | undefined {
 }
 
 export function requestedDate(raw: string): { value: string; flag: boolean } {
-  if (!raw) return { value: '', flag: true }
-  const parsed = toTrackerDate(raw)
-  if (parsed) return { value: parsed, flag: false }
-  return { value: raw, flag: true }
+  const parsed = parseDateField(raw)
+  return { value: parsed.value, flag: parsed.issue !== undefined }
+}
+
+/** Preserve invalid input while exposing why a date needs review. */
+export function parseDateField(raw: string | undefined): ParsedDateField {
+  const trimmed = raw?.trim() ?? ''
+  if (!trimmed) return { value: '', issue: 'missing' }
+  const parsed = toTrackerDate(trimmed)
+  if (parsed) return { value: parsed }
+  return { value: trimmed, issue: 'invalid', raw: trimmed }
 }

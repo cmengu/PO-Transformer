@@ -34,7 +34,12 @@
       "requested": "",
       "flags": [
         "requested"
-      ]
+      ],
+      "dateIssues": {
+        "requested": {
+          "kind": "missing"
+        }
+      }
     }
   ]
 }

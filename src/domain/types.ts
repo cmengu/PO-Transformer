@@ -1,4 +1,11 @@
 export type ObscuredPriceField = 'unitPrice' | 'total'
+export type DateField = 'poDate' | 'requested'
+export type DateIssueKind = 'missing' | 'invalid'
+
+export type DateIssue = {
+  kind: DateIssueKind
+  raw?: string
+}
 
 export type TrackerRow = {
   job: ''
@@ -17,6 +24,8 @@ export type TrackerRow = {
   flags: Array<'project' | 'rev' | 'requested'>
   /** Values present in the text layer but hidden by a later page image. */
   obscured?: ObscuredPriceField[]
+  /** Date values that need explicit user attention. */
+  dateIssues?: Partial<Record<DateField, DateIssue>>
 }
 
 export type ReadResult =

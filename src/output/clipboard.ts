@@ -1,4 +1,4 @@
-import type { ClipboardPayload, ObscuredPriceField, TrackerRow } from '../domain/types'
+import type { ClipboardPayload, DateField, ObscuredPriceField, TrackerRow } from '../domain/types'
 
 const HEADERS = [
   'Job#',
@@ -63,9 +63,10 @@ const HEADER_COLOURS: Array<{ background: string; color: string }> = [
 const TEXT_CELL_INDEXES = new Set([2, 3, 6, 7, 10])
 const PINK = '#FFC7CE'
 const WHITE = '#FFFFFF'
-const FLAG_INDEX: Record<'project' | 'rev' | 'requested' | ObscuredPriceField, number> = {
+const FLAG_INDEX: Record<'project' | 'rev' | DateField | ObscuredPriceField, number> = {
   project: 6,
   rev: 7,
+  poDate: 2,
   requested: 10,
   unitPrice: 11,
   total: 12,
@@ -91,6 +92,7 @@ function htmlTable(rows: TrackerRow[]): string {
       const flagged = new Set([
         ...row.flags.map((flag) => FLAG_INDEX[flag]),
         ...(row.obscured ?? []).map((field) => FLAG_INDEX[field]),
+        ...Object.keys(row.dateIssues ?? {}).map((field) => FLAG_INDEX[field as DateField]),
       ])
       const tds = rowCells(row)
         .map((value, index) => {

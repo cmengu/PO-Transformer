@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseUkDate, toTrackerDate, requestedDate } from './dates'
+import { parseDateField, parseUkDate, toTrackerDate, requestedDate } from './dates'
 
 describe('toTrackerDate', () => {
   it('turns DD-MMM-YYYY into dd/mm/yyyy', () => {
@@ -51,5 +51,22 @@ describe('requestedDate', () => {
 
   it('normalises a PO date and does not flag it', () => {
     expect(requestedDate('16-NOV-2026')).toEqual({ value: '16/11/2026', flag: false })
+  })
+})
+
+describe('parseDateField', () => {
+  it('distinguishes a missing date from an invalid date', () => {
+    expect(parseDateField('')).toEqual({ value: '', issue: 'missing' })
+    expect(parseDateField(undefined)).toEqual({ value: '', issue: 'missing' })
+    expect(parseDateField('ASAP')).toEqual({ value: 'ASAP', issue: 'invalid', raw: 'ASAP' })
+    expect(parseDateField('31/02/2026')).toEqual({
+      value: '31/02/2026',
+      issue: 'invalid',
+      raw: '31/02/2026',
+    })
+  })
+
+  it('returns a normalized value without an issue for valid dates', () => {
+    expect(parseDateField('5/1/2026')).toEqual({ value: '05/01/2026' })
   })
 })

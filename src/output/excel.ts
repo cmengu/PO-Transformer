@@ -1,6 +1,6 @@
 import writeXlsxFile, { type Row, type SheetData } from 'write-excel-file/universal'
 import { parseUkDate } from '../domain/dates'
-import type { ExcelFile, ObscuredPriceField, TrackerRow } from '../domain/types'
+import type { DateField, ExcelFile, ObscuredPriceField, TrackerRow } from '../domain/types'
 
 const RED = '#C00000'
 const YELLOW = '#FFD966'
@@ -43,7 +43,11 @@ function fileNameFor(rows: TrackerRow[]): string {
   return onlyPo ? `PO-${onlyPo}.xlsx` : `PO-rows-${todayStamp(new Date())}.xlsx`
 }
 
-function fill(row: TrackerRow, field: 'project' | 'rev' | 'requested' | ObscuredPriceField) {
+function fill(row: TrackerRow, field: 'project' | 'rev' | DateField | ObscuredPriceField) {
+  if (field === 'poDate' || field === 'requested') {
+    const flagged = row.dateIssues?.[field] !== undefined || (field === 'requested' && row.flags.includes(field))
+    return flagged ? PINK : undefined
+  }
   if (field === 'unitPrice' || field === 'total') {
     return row.obscured?.includes(field) ? PINK : undefined
   }
@@ -70,7 +74,7 @@ function dataRow(row: TrackerRow): Row {
   return [
     textCell(row.job),
     textCell(row.drawing),
-    dateCell(row.poDate),
+    dateCell(row.poDate, fill(row, 'poDate')),
     textCell(row.poNumber),
     numberCell(row.line),
     textCell(row.pur),

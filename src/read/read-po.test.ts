@@ -85,6 +85,9 @@ describe('readPo', () => {
     const file = 'f4-no-date-required.pdf'
     const result = await readPo(file, fixtureBytes(file))
     expect(result).toEqual(fixtureManifest(file))
+    if (result.kind === 'rows') {
+      expect(result.rows[1].dateIssues).toEqual({ requested: { kind: 'missing' } })
+    }
   })
 
   it('flags a missing rev on f5-no-rev-blank-prices.pdf without flagging blank prices', async () => {

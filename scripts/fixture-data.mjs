@@ -66,6 +66,7 @@ export function expectedRow(poHeader, item) {
     flags,
   };
   if (obscured.length > 0) row.obscured = obscured;
+  if (!item.dateRequired) row.dateIssues = { requested: { kind: 'missing' } };
   return row;
 }
 

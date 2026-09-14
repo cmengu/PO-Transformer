@@ -1,8 +1,13 @@
 {
   "name": "po-transformer",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fixtures": "node scripts/build-fixtures.mjs",
@@ -10,13 +15,22 @@
     "check-po": "tsx scripts/check-po.ts"
   },
   "dependencies": {
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "unpdf": "1.8.1",
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^24.3.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
     "fflate": "^0.8.3",
     "pdf-lib": "1.17.1",
+    "tailwindcss": "^4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^5.0.0"

@@ -4,6 +4,11 @@ node_modules/
 .env*
 .DS_Store
 *.xlsx
+/coverage
+/out
+*.tsbuildinfo
+next-env.d.ts
+
 # real client POs must never be committed; test fixtures live in an explicit folder
 *.pdf
 !fixtures/**/*.pdf

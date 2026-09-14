@@ -1,0 +1,13 @@
+{
+  "name": "po-transformer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fixtures": "node scripts/build-fixtures.mjs",
+    "fixtures:check": "node scripts/sanity-check.mjs"
+  },
+  "devDependencies": {
+    "pdf-lib": "1.17.1",
+    "unpdf": "1.8.1"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "file": "f6-awkward-values.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "08/09/2026",
+      "poNumber": "4500099006",
+      "line": 10,
+      "project": "B9006-WW600",
+      "rev": "00",
+      "description": "ADAPTER 3/8-16 (TYPE-B)",
+      "qty": 1200,
+      "unitPrice": 0.85,
+      "total": 1020,
+      "requested": "20/12/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "08/09/2026",
+      "poNumber": "4500099006",
+      "line": 20,
+      "project": "B9006-WW610",
+      "rev": "07",
+      "description": "CLAMP-ARM #4",
+      "qty": 8,
+      "unitPrice": 140,
+      "total": 1120,
+      "requested": "05/01/2027",
+      "flags": []
+    }
+  ]
+}

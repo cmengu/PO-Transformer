@@ -1,0 +1,38 @@
+{
+  "file": "f1-two-lines.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "03/09/2026",
+      "poNumber": "4500099001",
+      "line": 10,
+      "project": "B9001-XX100",
+      "rev": "03",
+      "description": "BRACKET PLATE",
+      "qty": 100,
+      "unitPrice": null,
+      "total": null,
+      "requested": "20/09/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "03/09/2026",
+      "poNumber": "4500099001",
+      "line": 20,
+      "project": "B9002-YY200",
+      "rev": "01",
+      "description": "HOUSING COVER",
+      "qty": 200,
+      "unitPrice": null,
+      "total": null,
+      "requested": "28/09/2026",
+      "flags": []
+    }
+  ]
+}

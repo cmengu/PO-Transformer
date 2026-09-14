@@ -1,0 +1,40 @@
+{
+  "file": "f4-no-date-required.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "06/09/2026",
+      "poNumber": "4500099004",
+      "line": 10,
+      "project": "B9004-RR400",
+      "rev": "02",
+      "description": "GUIDE RAIL",
+      "qty": 16,
+      "unitPrice": 22.5,
+      "total": 360,
+      "requested": "12/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "06/09/2026",
+      "poNumber": "4500099004",
+      "line": 20,
+      "project": "B9004-RR410",
+      "rev": "02",
+      "description": "LOCK PIN",
+      "qty": 40,
+      "unitPrice": 3.75,
+      "total": 150,
+      "requested": "",
+      "flags": [
+        "requested"
+      ]
+    }
+  ]
+}

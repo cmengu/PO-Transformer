@@ -1,0 +1,22 @@
+{
+  "file": "f2-one-line.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "04/09/2026",
+      "poNumber": "4500099002",
+      "line": 10,
+      "project": "B9003-ZZ300",
+      "rev": "11",
+      "description": "SENSOR MOUNT",
+      "qty": 8,
+      "unitPrice": 140,
+      "total": 1120,
+      "requested": "15/10/2026",
+      "flags": []
+    }
+  ]
+}

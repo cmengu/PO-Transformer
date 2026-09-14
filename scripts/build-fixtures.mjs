@@ -311,6 +311,24 @@ async function buildNotAem(fixture) {
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([PAGE_W, PAGE_H]);
+  if (fixture.variant === 'header-only') {
+    drawText(page, 'Purchase Order', 72, PAGE_H - 80, bold, 16);
+    drawText(page, 'Document Number', 72, PAGE_H - 120, bold, 10);
+    drawText(page, '4500081010', 190, PAGE_H - 120, font, 10);
+    drawText(page, 'Document Date', 72, PAGE_H - 140, bold, 10);
+    drawText(page, '14-SEP-2026', 190, PAGE_H - 140, font, 10);
+    drawText(page, 'Draft order summary - no line items included.', 72, PAGE_H - 185, font, 10);
+    return savePdf(doc);
+  }
+  if (fixture.variant === 'pr-only') {
+    drawText(page, 'Workshop material request', 72, PAGE_H - 80, bold, 16);
+    drawText(page, 'PR/No', 72, PAGE_H - 120, bold, 10);
+    drawText(page, 'Item No', 160, PAGE_H - 120, bold, 10);
+    drawText(page, '6000081011', 72, PAGE_H - 145, font, 10);
+    drawText(page, '10', 160, PAGE_H - 145, font, 10);
+    drawText(page, 'Fixture base plate', 225, PAGE_H - 145, font, 10);
+    return savePdf(doc);
+  }
   const lines = [
     [bold, 16, 'Workshop notes'],
     [font, 10, '14 September 2026'],

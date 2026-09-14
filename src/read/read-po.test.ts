@@ -46,6 +46,18 @@ describe('readPo', () => {
     expect(result).toEqual(fixtureManifest(file))
   })
 
+  it('rejects a document header without any valid line items', async () => {
+    const file = 'f10-header-only.pdf'
+    const result = await readPo(file, fixtureBytes(file))
+    expect(result).toEqual(fixtureManifest(file))
+  })
+
+  it('rejects a PR-like line when the PO identity is missing', async () => {
+    const file = 'f11-pr-only.pdf'
+    const result = await readPo(file, fixtureBytes(file))
+    expect(result).toEqual(fixtureManifest(file))
+  })
+
   it('flags a missing Date Required on f4-no-date-required.pdf', async () => {
     const file = 'f4-no-date-required.pdf'
     const result = await readPo(file, fixtureBytes(file))

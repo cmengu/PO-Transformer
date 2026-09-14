@@ -16,6 +16,7 @@ type VisualLine = {
 }
 
 const PR_RE = /^\d{10}$/
+const LINE_RE = /^\d+$/
 const REV_RE = /^\d{2}$/
 
 function isPdf(bytes: Uint8Array): boolean {
@@ -43,7 +44,7 @@ export async function readPo(file: string, bytes: Uint8Array): Promise<ReadResul
   const poNumber = valueRightOf(lines, 'Document Number') ?? ''
   const poDate = toTrackerDate(valueRightOf(lines, 'Document Date'))
   const starts = lineItemStarts(lines)
-  if (!poNumber && starts.length === 0) return { file, kind: 'issue', issue: 'not-aem' }
+  if (!poNumber || starts.length === 0) return { file, kind: 'issue', issue: 'not-aem' }
 
   const rows: TrackerRow[] = []
   for (let i = 0; i < starts.length; i++) {
@@ -137,7 +138,8 @@ function lineItemStarts(lines: VisualLine[]): number[] {
   const starts: number[] = []
   lines.forEach((line, idx) => {
     const first = line.items[0]?.str
-    if (first && PR_RE.test(first) && line.items[1]) starts.push(idx)
+    const lineNumber = line.items[1]?.str
+    if (first && PR_RE.test(first) && lineNumber && LINE_RE.test(lineNumber)) starts.push(idx)
   })
   return starts
 }

@@ -67,9 +67,14 @@ for (const fixture of FIXTURES) {
   }
 
   if (fixture.kind === 'not-aem') {
-    if (text.includes('Document Number')) fail(`${fixture.file} must not contain Document Number`);
-    if (items.some((page) => page.some((it) => /^\d{10}$/.test(it.str.trim())))) {
-      fail(`${fixture.file} must not contain a 10-digit PR run`);
+    const hasDocumentNumber = text.includes('Document Number');
+    const hasPrHeader = text.includes('PR/No');
+    if (fixture.variant === 'header-only' && (!hasDocumentNumber || hasPrHeader)) {
+      fail(`${fixture.file} must contain only the PO header anchor`);
+    } else if (fixture.variant === 'pr-only' && (hasDocumentNumber || !hasPrHeader)) {
+      fail(`${fixture.file} must contain only the PR anchor`);
+    } else if (!fixture.variant && (hasDocumentNumber || hasPrHeader)) {
+      fail(`${fixture.file} must not contain AEM parser anchors`);
     } else {
       console.log(`ok  ${fixture.file}  text, not AEM (${runCount} runs)`);
     }

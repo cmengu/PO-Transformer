@@ -271,6 +271,22 @@ export const FIXTURES = [
     issue: 'not-pdf',
     body: 'This file is plain text, not a PDF. It exists so a rejected drop can be tested.\n',
   },
+  {
+    id: 'f10',
+    file: 'f10-header-only.pdf',
+    kind: 'not-aem',
+    issue: 'not-aem',
+    title: 'Invented header-only document F10',
+    variant: 'header-only',
+  },
+  {
+    id: 'f11',
+    file: 'f11-pr-only.pdf',
+    kind: 'not-aem',
+    issue: 'not-aem',
+    title: 'Invented PR-only document F11',
+    variant: 'pr-only',
+  },
 ];
 
 function item(pr, line, project, rev, partName, dateRequired, qty, unitPrice) {

@@ -1,0 +1,54 @@
+{
+  "file": "pm05_vertex_motion_revision.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "16/09/2026",
+      "poNumber": "4500108105",
+      "line": 10,
+      "project": "VMC-77210",
+      "rev": "04",
+      "description": "REVISED BALL SCREW SUPPORT HOUSING",
+      "qty": 20,
+      "unitPrice": 214.5,
+      "total": 4290.0,
+      "requested": "15/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "16/09/2026",
+      "poNumber": "4500108105",
+      "line": 20,
+      "project": "VMC-77225",
+      "rev": "02",
+      "description": "LINEAR RAIL END STOP BLOCK",
+      "qty": 40,
+      "unitPrice": 28.75,
+      "total": 1150.0,
+      "requested": "15/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "16/09/2026",
+      "poNumber": "4500108105",
+      "line": 30,
+      "project": "VMC-77239",
+      "rev": "01",
+      "description": "BELT TENSIONER PLATE CHANGE ADDITION",
+      "qty": 12,
+      "unitPrice": 83.0,
+      "total": 996.0,
+      "requested": "22/10/2026",
+      "flags": []
+    }
+  ]
+}

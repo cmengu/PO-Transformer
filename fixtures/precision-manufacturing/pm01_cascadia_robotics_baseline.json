@@ -1,0 +1,54 @@
+{
+  "file": "pm01_cascadia_robotics_baseline.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "02/09/2026",
+      "poNumber": "4500108101",
+      "line": 10,
+      "project": "CRB-26091",
+      "rev": "03",
+      "description": "CNC MACHINED SENSOR MOUNTING BRACKET",
+      "qty": 48,
+      "unitPrice": 42.5,
+      "total": 2040.0,
+      "requested": "24/09/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "02/09/2026",
+      "poNumber": "4500108101",
+      "line": 20,
+      "project": "CRB-26104",
+      "rev": "01",
+      "description": "ANODISED ALUMINIUM GUARD PLATE",
+      "qty": 24,
+      "unitPrice": 68.75,
+      "total": 1650.0,
+      "requested": "24/09/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "02/09/2026",
+      "poNumber": "4500108101",
+      "line": 30,
+      "project": "CRB-26117",
+      "rev": "02",
+      "description": "STAINLESS STEEL SHAFT COLLAR 25 MM BORE",
+      "qty": 60,
+      "unitPrice": 19.8,
+      "total": 1188.0,
+      "requested": "30/09/2026",
+      "flags": []
+    }
+  ]
+}

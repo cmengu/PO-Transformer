@@ -1,0 +1,44 @@
+[
+  {
+    "file": "pm01_cascadia_robotics_baseline.pdf",
+    "company": "Cascadia Robotics Pte. Ltd.",
+    "pages": 1,
+    "expected": "rows",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  },
+  {
+    "file": "pm02_helix_aero_mult_page.pdf",
+    "company": "Helix Aero Systems Sdn. Bhd.",
+    "pages": 2,
+    "expected": "rows",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  },
+  {
+    "file": "pm03_meridian_diagnostics_usd.pdf",
+    "company": "Meridian Diagnostics LLC",
+    "pages": 1,
+    "expected": "rows",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  },
+  {
+    "file": "pm04_northstar_tooling_dense_landscape.pdf",
+    "company": "Northstar Tooling and Automation Ltd.",
+    "pages": 2,
+    "expected": "rows",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  },
+  {
+    "file": "pm05_vertex_motion_revision.pdf",
+    "company": "Vertex Motion Controls Pte. Ltd.",
+    "pages": 1,
+    "expected": "rows",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  },
+  {
+    "file": "pm06_summit_linear_scanned.pdf",
+    "company": "Summit Linear Systems Co.",
+    "pages": 1,
+    "expected": "issue",
+    "notes": "All content is synthetic; names, IDs and addresses are fictional."
+  }
+]

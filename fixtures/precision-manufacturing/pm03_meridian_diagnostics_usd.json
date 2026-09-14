@@ -1,0 +1,54 @@
+{
+  "file": "pm03_meridian_diagnostics_usd.pdf",
+  "kind": "rows",
+  "rows": [
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "09/09/2026",
+      "poNumber": "4500108103",
+      "line": 10,
+      "project": "MDX-70344",
+      "rev": "02",
+      "description": "316 STAINLESS SAMPLE TRAY CARRIER",
+      "qty": 36,
+      "unitPrice": 118.25,
+      "total": 4150.57,
+      "requested": "02/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "09/09/2026",
+      "poNumber": "4500108103",
+      "line": 20,
+      "project": "MDX-70358",
+      "rev": "04",
+      "description": "POLYMER FLUIDIC MANIFOLD SUPPORT",
+      "qty": 18,
+      "unitPrice": 246.0,
+      "total": 4317.3,
+      "requested": "02/10/2026",
+      "flags": []
+    },
+    {
+      "job": "",
+      "drawing": "",
+      "pur": "",
+      "poDate": "09/09/2026",
+      "poNumber": "4500108103",
+      "line": 30,
+      "project": "MDX-70361",
+      "rev": "01",
+      "description": "LASER MARKED ALUMINIUM COVER PANEL",
+      "qty": 50,
+      "unitPrice": 37.8,
+      "total": 1890.0,
+      "requested": "09/10/2026",
+      "flags": []
+    }
+  ]
+}

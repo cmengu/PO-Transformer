@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ReadResult, TrackerRow } from '../domain/types'
-import { addResults, createTable, editCell, flaggedCellCount, resetTable } from './table'
+import { addResults, createTable, editCell, flaggedCellCount, resetTable, sheetStatus } from './table'
 
 function row(overrides: Partial<TrackerRow> & Pick<TrackerRow, 'poNumber' | 'line'>): TrackerRow {
   return {
@@ -115,5 +115,24 @@ describe('tracker table', () => {
       { file: 'notes.pdf', message: 'Not an AEM purchase order' },
       { file: 'letter.txt', message: 'Not a PDF' },
     ])
+  })
+
+  it('does not show a tracker sheet when the only result is a file issue', () => {
+    const table = addResults(createTable(), [
+      { file: 'Sep-2026-Europe-Trip-v8.7.pdf', kind: 'issue', issue: 'not-aem' },
+    ])
+
+    expect(sheetStatus(table)).toEqual({ showSheet: false, label: null })
+  })
+
+  it('shows All cells look complete only when there are unflagged rows', () => {
+    const table = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })]),
+    ])
+
+    expect(sheetStatus(table)).toEqual({
+      showSheet: true,
+      label: 'All cells look complete',
+    })
   })
 })

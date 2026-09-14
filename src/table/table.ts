@@ -45,6 +45,21 @@ export function flaggedCellCount(table: TrackerTable): number {
   return table.rows.reduce((n, row) => n + row.flags.length, 0)
 }
 
+export function sheetStatus(table: TrackerTable): {
+  showSheet: boolean
+  label: string | null
+} {
+  if (table.rows.length === 0) return { showSheet: false, label: null }
+  const n = flaggedCellCount(table)
+  return {
+    showSheet: true,
+    label:
+      n === 0
+        ? 'All cells look complete'
+        : `${n} cell${n === 1 ? '' : 's'} to check`,
+  }
+}
+
 function issueMessage(issue: 'not-pdf' | 'no-text' | 'not-aem'): string {
   if (issue === 'not-pdf') return 'Not a PDF'
   if (issue === 'no-text') return "Can't be read — looks scanned"

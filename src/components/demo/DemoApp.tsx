@@ -12,8 +12,8 @@ import {
   addResults,
   createTable,
   editCell,
-  flaggedCellCount,
   resetTable,
+  sheetStatus,
 } from "@/table/table";
 import { clipboardPayload } from "@/output/clipboard";
 import {
@@ -58,7 +58,7 @@ export function DemoApp() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const flagCount = flaggedCellCount(table);
+  const { showSheet, label } = sheetStatus(table);
   const stepLabel = LOADING_STEPS[stepIndex] ?? LOADING_STEPS[0];
 
   async function processFiles(fileList: File[]) {
@@ -206,100 +206,120 @@ export function DemoApp() {
             </ul>
           )}
 
-          <div className="overflow-hidden rounded-[1.5rem] bg-[#faf6ef] shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-              <p className="text-sm">
-                {flagCount === 0
-                  ? "All cells look complete"
-                  : `${flagCount} cell${flagCount === 1 ? "" : "s"} to check`}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onCopy}
-                  className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
-                >
-                  Copy table
-                </button>
-                <button
-                  type="button"
-                  onClick={onDownload}
-                  className="rounded-full border border-[#1c1917] px-4 py-2 text-sm"
-                >
-                  Download Excel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setScene("empty")}
-                  className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
-                >
-                  Add more POs
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTable(resetTable());
-                    setScene("empty");
-                  }}
-                  className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
-                >
-                  Start over
-                </button>
+          {showSheet && (
+            <div className="overflow-hidden rounded-[1.5rem] bg-[#faf6ef] shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <p className="text-sm">{label}</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={onCopy}
+                    className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
+                  >
+                    Copy table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDownload}
+                    className="rounded-full border border-[#1c1917] px-4 py-2 text-sm"
+                  >
+                    Download Excel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScene("empty")}
+                    className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
+                  >
+                    Add more POs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTable(resetTable());
+                      setScene("empty");
+                    }}
+                    className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
+                  >
+                    Start over
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-max border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr>
+                      {COLUMNS.map((col) => (
+                        <th
+                          key={col.key}
+                          className="border border-[#d6d0c6] px-3 py-2 text-left font-semibold whitespace-nowrap"
+                          style={{
+                            backgroundColor: col.headerBg,
+                            color: col.headerFg,
+                          }}
+                        >
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.rows.map((row, rowIndex) => (
+                      <tr key={`${row.poNumber}-${row.line}`}>
+                        {COLUMNS.map((col) => {
+                          const flagged = isFlagged(row, col.key);
+                          return (
+                            <td
+                              key={col.key}
+                              className="border border-[#e6ddd0] p-0 align-top"
+                              style={{
+                                backgroundColor: flagged ? "#FFC7CE" : "#faf6ef",
+                              }}
+                            >
+                              <input
+                                value={cellValue(row, col.key)}
+                                onChange={(e) =>
+                                  onEdit(rowIndex, col.key, e.target.value)
+                                }
+                                className="w-36 bg-transparent px-3 py-2 outline-none"
+                                aria-label={`${col.label} line ${row.line}`}
+                              />
+                              {flagged && (
+                                <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
+                                  {FLAG_NOTE}
+                                </p>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-max border-separate border-spacing-0 text-sm">
-                <thead>
-                  <tr>
-                    {COLUMNS.map((col) => (
-                      <th
-                        key={col.key}
-                        className="border border-[#d6d0c6] px-3 py-2 text-left font-semibold whitespace-nowrap"
-                        style={{
-                          backgroundColor: col.headerBg,
-                          color: col.headerFg,
-                        }}
-                      >
-                        {col.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {table.rows.map((row, rowIndex) => (
-                    <tr key={`${row.poNumber}-${row.line}`}>
-                      {COLUMNS.map((col) => {
-                        const flagged = isFlagged(row, col.key);
-                        return (
-                          <td
-                            key={col.key}
-                            className="border border-[#e6ddd0] p-0 align-top"
-                            style={{
-                              backgroundColor: flagged ? "#FFC7CE" : "#faf6ef",
-                            }}
-                          >
-                            <input
-                              value={cellValue(row, col.key)}
-                              onChange={(e) =>
-                                onEdit(rowIndex, col.key, e.target.value)
-                              }
-                              className="w-36 bg-transparent px-3 py-2 outline-none"
-                              aria-label={`${col.label} line ${row.line}`}
-                            />
-                            {flagged && (
-                              <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
-                                {FLAG_NOTE}
-                              </p>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          )}
+
+          {!showSheet && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setScene("empty")}
+                className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
+              >
+                Add more POs
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTable(resetTable());
+                  setScene("empty");
+                }}
+                className="rounded-full px-4 py-2 text-sm text-[#5c564e]"
+              >
+                Start over
+              </button>
             </div>
-          </div>
+          )}
         </div>
       )}
 

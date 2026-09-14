@@ -15,6 +15,10 @@ export type TrackerRow = {
   flags: Array<'project' | 'rev' | 'requested'>
 }
 
+export type ReadResult =
+  | { file: string; kind: 'rows'; rows: TrackerRow[] }
+  | { file: string; kind: 'issue'; issue: 'not-pdf' | 'no-text' | 'not-aem' }
+
 export type ClipboardPayload = {
   html: string
   plain: string

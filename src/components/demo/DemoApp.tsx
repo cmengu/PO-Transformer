@@ -5,29 +5,122 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { ReadResult, TrackerRow } from "@/domain/types";
+import type { ReadResult } from "@/domain/types";
 import type { TrackerTable } from "@/table/table";
 import {
   addResults,
   createTable,
   editCell,
+  editCustomCell,
   resetTable,
   sheetStatus,
 } from "@/table/table";
+import {
+  createCustomColumn,
+  defaultColumns,
+  moveColumn,
+  parseColumnValue,
+  removeColumn,
+  type ColumnDefinition,
+} from "@/table/columns";
 import { clipboardPayload } from "@/output/clipboard";
 import {
-  COLUMNS,
   LOADING_STEPS,
-  cellValue,
+  columnCellValue,
   flagNote,
   isFlagged,
   parseCell,
-  type ColumnKey,
 } from "./data";
 
 type Scene = "empty" | "loading" | "results";
 
 const MIN_LOADING_MS = 4000;
+
+type ColumnManagerProps = {
+  columns: ColumnDefinition[];
+  onChange: (columns: ColumnDefinition[]) => void;
+};
+
+function ColumnManager({ columns, onChange }: ColumnManagerProps) {
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [label, setLabel] = useState("");
+  const [type, setType] = useState<ColumnDefinition["type"]>("text");
+
+  function addColumn(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    onChange([...columns, createCustomColumn(id, trimmed, type)]);
+    setLabel("");
+    setType("text");
+  }
+
+  function moveBy(index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= columns.length) return;
+    onChange(moveColumn(columns, columns[index].id, columns[target].id));
+  }
+
+  return (
+    <section className="mx-auto mb-6 max-w-6xl rounded-3xl bg-[#faf6ef] px-5 py-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Table columns</p>
+          <p className="text-xs text-[#7c746a]">Drag to reorder, or add your own field before uploading.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(defaultColumns())}
+          className="rounded-full border border-[#c4b8a6] px-3 py-1 text-xs text-[#5c564e]"
+        >
+          Reset defaults
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {columns.map((column, index) => (
+          <div
+            key={column.id}
+            draggable
+            onDragStart={() => setDraggedId(column.id)}
+            onDragEnd={() => setDraggedId(null)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (draggedId) onChange(moveColumn(columns, draggedId, column.id));
+              setDraggedId(null);
+            }}
+            className={`flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${
+              draggedId === column.id ? "border-[#1c1917] bg-[#ece4d6]" : "border-[#d6d0c6]"
+            }`}
+            title="Drag to reorder"
+          >
+            <span className="cursor-grab px-1">{column.label}</span>
+            <button type="button" onClick={() => moveBy(index, -1)} aria-label={`Move ${column.label} left`} className="px-1 text-[#7c746a]">‹</button>
+            <button type="button" onClick={() => moveBy(index, 1)} aria-label={`Move ${column.label} right`} className="px-1 text-[#7c746a]">›</button>
+            <button type="button" onClick={() => onChange(removeColumn(columns, column.id))} aria-label={`Delete ${column.label} column`} className="px-1 text-[#9c1c1c]">×</button>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={addColumn} className="mt-3 flex flex-wrap items-center gap-2">
+        <label className="sr-only" htmlFor="new-column-label">New column name</label>
+        <input
+          id="new-column-label"
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+          placeholder="New column name"
+          className="rounded-full border border-[#c4b8a6] bg-transparent px-3 py-1.5 text-xs outline-none"
+        />
+        <label className="sr-only" htmlFor="new-column-type">New column type</label>
+        <select id="new-column-type" value={type} onChange={(event) => setType(event.target.value as ColumnDefinition["type"])} className="rounded-full border border-[#c4b8a6] bg-transparent px-3 py-1.5 text-xs">
+          <option value="text">Text</option>
+          <option value="number">Number</option>
+          <option value="date">Date</option>
+        </select>
+        <button type="submit" className="rounded-full bg-[#1c1917] px-3 py-1.5 text-xs text-white">Add column</button>
+      </form>
+    </section>
+  );
+}
 
 export function DemoApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,6 +132,7 @@ export function DemoApp() {
   const [readStep, setReadStep] = useState(0);
   const [fileIndex, setFileIndex] = useState(1);
   const [fileCount, setFileCount] = useState(1);
+  const [columns, setColumns] = useState<ColumnDefinition[]>(defaultColumns);
 
   useEffect(() => {
     if (scene !== "loading") return;
@@ -108,15 +202,17 @@ export function DemoApp() {
     }
   }
 
-  function onEdit(rowIndex: number, key: ColumnKey, value: string) {
-    const parsed = parseCell(key, value);
-    setTable((current) =>
-      editCell(current, rowIndex, key, parsed as TrackerRow[typeof key]),
-    );
+  function onEdit(rowIndex: number, column: ColumnDefinition, value: string) {
+    if (column.source) {
+      const parsed = parseCell(column.source, value);
+      setTable((current) => editCell(current, rowIndex, column.source!, parsed as never));
+    } else {
+      setTable((current) => editCustomCell(current, rowIndex, column.id, parseColumnValue(column, value)));
+    }
   }
 
   function onCopy() {
-    const { html, plain } = clipboardPayload(table.rows);
+    const { html, plain } = clipboardPayload(table.rows, columns);
     void navigator.clipboard
       .write([
         new ClipboardItem({
@@ -132,7 +228,7 @@ export function DemoApp() {
 
   function onDownload() {
     void import("@/output/download-excel").then(({ downloadExcel }) =>
-      downloadExcel(table.rows),
+      downloadExcel(table.rows, columns),
     );
   }
 
@@ -202,7 +298,9 @@ export function DemoApp() {
       </header>
 
       {scene === "empty" && (
-        <button
+        <>
+          <ColumnManager columns={columns} onChange={setColumns} />
+          <button
           type="button"
           onDragOver={(e) => {
             e.preventDefault();
@@ -225,7 +323,8 @@ export function DemoApp() {
           <span className="mt-3 max-w-sm text-sm text-[#5c564e]">
             files stay on your computer — or click to browse
           </span>
-        </button>
+          </button>
+        </>
       )}
 
       {scene === "loading" && (
@@ -242,6 +341,7 @@ export function DemoApp() {
 
       {scene === "results" && (
         <div className="mx-auto max-w-6xl space-y-6">
+          <ColumnManager columns={columns} onChange={setColumns} />
           {table.messages.length > 0 && (
             <ul className="space-y-2 text-sm">
               {table.messages.map((m, i) => (
@@ -265,9 +365,9 @@ export function DemoApp() {
                 <table className="min-w-max border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
-                      {COLUMNS.map((col) => (
+                      {columns.map((col) => (
                         <th
-                          key={col.key}
+                          key={col.id}
                           className="border border-[#d6d0c6] px-3 py-2 text-left font-semibold whitespace-nowrap"
                           style={{
                             backgroundColor: col.headerBg,
@@ -282,27 +382,27 @@ export function DemoApp() {
                   <tbody>
                     {table.rows.map((row, rowIndex) => (
                       <tr key={rowIndex}>
-                        {COLUMNS.map((col) => {
-                          const flagged = isFlagged(row, col.key);
+                        {columns.map((col) => {
+                          const flagged = col.source ? isFlagged(row, col.source) : false;
                           return (
                             <td
-                              key={col.key}
+                              key={col.id}
                               className="border border-[#e6ddd0] p-0 align-top"
                               style={{
                                 backgroundColor: flagged ? "#FFC7CE" : "#faf6ef",
                               }}
                             >
                               <input
-                                value={cellValue(row, col.key)}
+                                value={columnCellValue(row, col)}
                                 onChange={(e) =>
-                                  onEdit(rowIndex, col.key, e.target.value)
+                                  onEdit(rowIndex, col, e.target.value)
                                 }
                                 className="w-36 bg-transparent px-3 py-2 outline-none"
                                 aria-label={`${col.label} row ${rowIndex + 1}`}
                               />
                               {flagged && (
                                 <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
-                                  {flagNote(row, col.key)}
+                                  {col.source ? flagNote(row, col.source) : ""}
                                 </p>
                               )}
                             </td>

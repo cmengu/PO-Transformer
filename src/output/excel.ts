@@ -1,33 +1,9 @@
 import writeXlsxFile, { type Row, type SheetData } from 'write-excel-file/universal'
 import { parseUkDate } from '../domain/dates'
-import type { DateField, ExcelFile, ObscuredPriceField, TrackerRow } from '../domain/types'
+import type { ExcelFile, TrackerRow } from '../domain/types'
+import { columnFlagged, columnValue, DEFAULT_COLUMNS, type ColumnDefinition } from '../table/columns'
 
-const RED = '#C00000'
-const YELLOW = '#FFD966'
-const CYAN = '#7FF5EA'
-const GREY = '#D9D9D9'
-const BLACK = '#000000'
 const PINK = '#FFC7CE'
-
-const COLUMNS: Array<{
-  value: string
-  textColor: string
-  backgroundColor: string
-}> = [
-  { value: 'Job#', textColor: RED, backgroundColor: YELLOW },
-  { value: 'Engineering drawing#', textColor: RED, backgroundColor: YELLOW },
-  { value: 'PO Date', textColor: BLACK, backgroundColor: YELLOW },
-  { value: 'PO #', textColor: BLACK, backgroundColor: YELLOW },
-  { value: 'Line', textColor: BLACK, backgroundColor: YELLOW },
-  { value: 'Pur', textColor: RED, backgroundColor: YELLOW },
-  { value: 'Project Number', textColor: RED, backgroundColor: YELLOW },
-  { value: 'Rev', textColor: RED, backgroundColor: YELLOW },
-  { value: 'Description', textColor: BLACK, backgroundColor: YELLOW },
-  { value: 'PO Qty', textColor: BLACK, backgroundColor: CYAN },
-  { value: 'Requested Date', textColor: RED, backgroundColor: YELLOW },
-  { value: 'Unit Price', textColor: BLACK, backgroundColor: GREY },
-  { value: 'Total Price', textColor: BLACK, backgroundColor: GREY },
-]
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0')
@@ -41,17 +17,6 @@ function fileNameFor(rows: TrackerRow[]): string {
   const poNumbers = new Set(rows.map((row) => row.poNumber))
   const onlyPo = poNumbers.size === 1 ? rows[0]?.poNumber : undefined
   return onlyPo ? `PO-${onlyPo}.xlsx` : `PO-rows-${todayStamp(new Date())}.xlsx`
-}
-
-function fill(row: TrackerRow, field: 'project' | 'rev' | DateField | ObscuredPriceField) {
-  if (field === 'poDate' || field === 'requested') {
-    const flagged = row.dateIssues?.[field] !== undefined || (field === 'requested' && row.flags.includes(field))
-    return flagged ? PINK : undefined
-  }
-  if (field === 'unitPrice' || field === 'total') {
-    return row.obscured?.includes(field) ? PINK : undefined
-  }
-  return row.flags.includes(field) ? PINK : undefined
 }
 
 function textCell(value: string, backgroundColor?: string) {
@@ -70,45 +35,45 @@ function dateCell(value: string, backgroundColor?: string) {
   return backgroundColor ? { backgroundColor } : null
 }
 
-function dataRow(row: TrackerRow): Row {
-  return [
-    textCell(row.job),
-    textCell(row.drawing),
-    dateCell(row.poDate, fill(row, 'poDate')),
-    textCell(row.poNumber),
-    numberCell(row.line),
-    textCell(row.pur),
-    textCell(row.project, fill(row, 'project')),
-    textCell(row.rev, fill(row, 'rev')),
-    textCell(row.description),
-    numberCell(row.qty),
-    dateCell(row.requested, fill(row, 'requested')),
-    numberCell(row.unitPrice, fill(row, 'unitPrice')),
-    numberCell(row.total, fill(row, 'total')),
-  ]
+function numericValue(value: string): number | null {
+  if (!value) return null
+  const number = Number(value.replace(/,/g, ''))
+  return Number.isFinite(number) ? number : null
 }
 
-export function excelSheet(rows: TrackerRow[]): {
+function cellFor(row: TrackerRow, column: ColumnDefinition) {
+  const value = columnValue(row, column)
+  const backgroundColor = columnFlagged(row, column) ? PINK : undefined
+  if (column.type === 'date') return dateCell(value, backgroundColor)
+  if (column.type === 'number') return numberCell(numericValue(value), backgroundColor)
+  return textCell(value, backgroundColor)
+}
+
+function dataRow(row: TrackerRow, columns: ColumnDefinition[]): Row {
+  return columns.map((column) => cellFor(row, column))
+}
+
+export function excelSheet(rows: TrackerRow[], columns: ColumnDefinition[] = DEFAULT_COLUMNS): {
   data: SheetData
   columns: Array<{ width: number }>
   fileName: string
 } {
-  const header = COLUMNS.map((column) => ({
-    value: column.value,
+  const header = columns.map((column) => ({
+    value: column.label,
     fontWeight: 'bold' as const,
     align: 'center' as const,
-    textColor: column.textColor,
-    backgroundColor: column.backgroundColor,
+    textColor: column.headerFg,
+    backgroundColor: column.headerBg,
   }))
   return {
-    data: [header, ...rows.map(dataRow)],
-    columns: COLUMNS.map(() => ({ width: 16 })),
+    data: [header, ...rows.map((row) => dataRow(row, columns))],
+    columns: columns.map(() => ({ width: 16 })),
     fileName: fileNameFor(rows),
   }
 }
 
-export async function excelFile(rows: TrackerRow[]): Promise<ExcelFile> {
-  const { data, columns, fileName } = excelSheet(rows)
-  const blob = await writeXlsxFile(data, { columns }).toBlob()
+export async function excelFile(rows: TrackerRow[], columns: ColumnDefinition[] = DEFAULT_COLUMNS): Promise<ExcelFile> {
+  const { data, columns: widths, fileName } = excelSheet(rows, columns)
+  const blob = await writeXlsxFile(data, { columns: widths }).toBlob()
   return { blob, fileName }
 }

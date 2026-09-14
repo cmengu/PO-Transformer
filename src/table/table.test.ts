@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ReadResult, TrackerRow } from '../domain/types'
-import { addResults, createTable, editCell, flaggedCellCount, resetTable, sheetStatus } from './table'
+import { addResults, createTable, editCell, editCustomCell, flaggedCellCount, resetTable, sheetStatus } from './table'
 
 function row(overrides: Partial<TrackerRow> & Pick<TrackerRow, 'poNumber' | 'line'>): TrackerRow {
   return {
@@ -141,6 +141,28 @@ describe('tracker table', () => {
     const table = editCell(started, 0, 'requested', '31/02/2026')
 
     expect(table.rows[0].flags).toEqual(['requested'])
+  })
+
+  it('counts and clears an invalid PO date issue', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({
+        poNumber: '4500011111',
+        line: 10,
+        poDate: '31/02/2026',
+        dateIssues: { poDate: { kind: 'invalid', raw: '31/02/2026' } },
+      })]),
+    ])
+
+    expect(sheetStatus(started)).toEqual({ showSheet: true, label: '1 cell to check' })
+    const corrected = editCell(started, 0, 'poDate', '05/09/2026')
+    expect(corrected.rows[0].dateIssues).toBeUndefined()
+    expect(sheetStatus(corrected)).toEqual({ showSheet: true, label: 'All cells look complete' })
+  })
+
+  it('stores values entered into a custom column', () => {
+    const started = addResults(createTable(), [rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10 })])])
+    const table = editCustomCell(started, 0, 'custom-customer', 'Acme Precision')
+    expect(table.rows[0].customValues).toEqual({ 'custom-customer': 'Acme Precision' })
   })
 
   it('adds more results onto an existing table and reset clears it', () => {

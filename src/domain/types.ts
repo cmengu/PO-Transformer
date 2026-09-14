@@ -26,6 +26,8 @@ export type TrackerRow = {
   obscured?: ObscuredPriceField[]
   /** Date values that need explicit user attention. */
   dateIssues?: Partial<Record<DateField, DateIssue>>
+  /** Values entered into user-created columns. */
+  customValues?: Record<string, string | number | null>
 }
 
 export type ReadResult =

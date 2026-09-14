@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TrackerRow } from '../domain/types'
 import { clipboardPayload } from './clipboard'
+import { createCustomColumn, defaultColumns } from '../table/columns'
 
 const twoPoRows: TrackerRow[] = [
   {
@@ -140,6 +141,24 @@ describe('clipboardPayload', () => {
     expect(plain).toContain('\t20/12/2026\t\t')
     expect(tds[11]).toContain('#FFC7CE')
     expect(tds[12]).toContain('#FFC7CE')
+  })
+
+  it('keeps an invalid PO date visible and marks it pink', () => {
+    const { html, plain } = clipboardPayload([{
+      ...twoPoRows[0],
+      poDate: '31/02/2026',
+      dateIssues: { poDate: { kind: 'invalid', raw: '31/02/2026' } },
+    }])
+    const tds = [...html.matchAll(/<td\b[^>]*>/g)].map((match) => match[0])
+    expect(plain).toContain('31/02/2026')
+    expect(tds[2]).toContain('#FFC7CE')
+  })
+
+  it('exports caller-defined columns in their supplied order', () => {
+    const custom = createCustomColumn('customer', 'Customer')
+    const columns = [custom, defaultColumns()[3]]
+    const { plain } = clipboardPayload([{ ...twoPoRows[0], customValues: { customer: 'Acme Precision' } }], columns)
+    expect(plain).toBe(['Customer\tPO #', 'Acme Precision\t4500011111'].join('\n'))
   })
 
   it('puts padding, background and font on every th and td', () => {

@@ -43,7 +43,10 @@ export function addResults(table: TrackerTable, results: ReadResult[]): TrackerT
 }
 
 export function flaggedCellCount(table: TrackerTable): number {
-  return table.rows.reduce((n, row) => n + row.flags.length + (row.obscured?.length ?? 0), 0)
+  return table.rows.reduce(
+    (n, row) => n + row.flags.length + (row.obscured?.length ?? 0) + (row.dateIssues?.poDate ? 1 : 0),
+    0,
+  )
 }
 
 export function sheetStatus(table: TrackerTable): {
@@ -107,6 +110,25 @@ export function editCell<K extends keyof TrackerRow>(
       else delete next.obscured
     }
     return next
+  })
+  return { ...table, rows }
+}
+
+export function editCustomCell(
+  table: TrackerTable,
+  rowIndex: number,
+  columnId: string,
+  value: string | number | null,
+): TrackerTable {
+  const rows = table.rows.map((row, index) => {
+    if (index !== rowIndex) return row
+    return {
+      ...row,
+      customValues: {
+        ...(row.customValues ?? {}),
+        [columnId]: value,
+      },
+    }
   })
   return { ...table, rows }
 }

@@ -2,6 +2,7 @@ import { unzipSync, strFromU8 } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
 import type { TrackerRow } from '../domain/types'
 import { excelFile } from './excel'
+import { createCustomColumn, defaultColumns } from '../table/columns'
 
 const onePoRow: TrackerRow = {
   job: '',
@@ -145,5 +146,27 @@ describe('excelFile', () => {
     expect(sheet).toMatch(/<c r="L2"[^>]*\/>/)
     expect(sheet).toMatch(/<c r="M2"[^>]*\/>/)
     expect(strings).not.toContain('12.5')
+  })
+
+  it('keeps an invalid PO date as text and fills it pink', async () => {
+    const { blob } = await excelFile([{
+      ...onePoRow,
+      poDate: '31/02/2026',
+      dateIssues: { poDate: { kind: 'invalid', raw: '31/02/2026' } },
+    }])
+    const { styles, strings } = await unzipXlsx(blob)
+    expect(styles).toContain('FFC7CE')
+    expect(strings).toContain('31/02/2026')
+  })
+
+  it('writes caller-defined columns in their supplied order', async () => {
+    const custom = createCustomColumn('customer', 'Customer')
+    const columns = [custom, defaultColumns()[3]]
+    const { blob } = await excelFile([{ ...onePoRow, customValues: { customer: 'Acme Precision' } }], columns)
+    const { strings, sheet } = await unzipXlsx(blob)
+    expect(strings).toContain('Customer')
+    expect(strings).toContain('Acme Precision')
+    expect(sheet).toMatch(/<c r="A2"[^>]*t="s"/)
+    expect(sheet).toMatch(/<c r="B2"[^>]*t="s"/)
   })
 })

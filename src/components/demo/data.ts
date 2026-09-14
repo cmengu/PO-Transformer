@@ -1,52 +1,13 @@
-import type { DateField, ObscuredPriceField, TrackerRow } from "@/domain/types";
+import type { DateField, ObscuredPriceField, TrackerRow } from "../../domain/types";
+import {
+  DEFAULT_COLUMNS,
+  columnValue,
+  type BuiltInColumnKey,
+  type ColumnDefinition,
+} from "../../table/columns";
 
-export const COLUMNS = [
-  { key: "job", label: "Job#", headerBg: "#FFD966", headerFg: "#C00000" },
-  {
-    key: "drawing",
-    label: "Engineering drawing#",
-    headerBg: "#FFD966",
-    headerFg: "#C00000",
-  },
-  { key: "poDate", label: "PO Date", headerBg: "#FFD966", headerFg: "#000000" },
-  { key: "poNumber", label: "PO #", headerBg: "#FFD966", headerFg: "#000000" },
-  { key: "line", label: "Line", headerBg: "#FFD966", headerFg: "#000000" },
-  { key: "pur", label: "Pur", headerBg: "#FFD966", headerFg: "#C00000" },
-  {
-    key: "project",
-    label: "Project Number",
-    headerBg: "#FFD966",
-    headerFg: "#C00000",
-  },
-  { key: "rev", label: "Rev", headerBg: "#FFD966", headerFg: "#C00000" },
-  {
-    key: "description",
-    label: "Description",
-    headerBg: "#FFD966",
-    headerFg: "#000000",
-  },
-  { key: "qty", label: "PO Qty", headerBg: "#7FF5EA", headerFg: "#000000" },
-  {
-    key: "requested",
-    label: "Requested Date",
-    headerBg: "#FFD966",
-    headerFg: "#C00000",
-  },
-  {
-    key: "unitPrice",
-    label: "Unit Price",
-    headerBg: "#D9D9D9",
-    headerFg: "#000000",
-  },
-  {
-    key: "total",
-    label: "Total Price",
-    headerBg: "#D9D9D9",
-    headerFg: "#000000",
-  },
-] as const;
-
-export type ColumnKey = (typeof COLUMNS)[number]["key"];
+export const COLUMNS = DEFAULT_COLUMNS;
+export type ColumnKey = BuiltInColumnKey;
 
 export const LOADING_STEPS = [
   "Reading PO…",
@@ -58,9 +19,11 @@ export const FLAG_NOTE = "Not found on PO — please check";
 const OBSCURED_NOTE = "Visually obscured in PDF — not imported";
 
 export function cellValue(row: TrackerRow, key: ColumnKey): string {
-  const value = row[key];
-  if (value === null || value === undefined) return "";
-  return String(value);
+  return columnValue(row, { id: key, source: key, label: "", type: "text", headerBg: "", headerFg: "" });
+}
+
+export function columnCellValue(row: TrackerRow, column: ColumnDefinition): string {
+  return columnValue(row, column);
 }
 
 export function isFlagged(row: TrackerRow, key: ColumnKey): boolean {

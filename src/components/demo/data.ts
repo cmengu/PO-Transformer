@@ -32,7 +32,7 @@ export const COLUMNS = [
     headerFg: "#C00000",
   },
   { key: "poDate", label: "PO Date", headerBg: "#FFD966", headerFg: "#000000" },
-  { key: "poNumber", label: "PO#", headerBg: "#FFD966", headerFg: "#000000" },
+  { key: "poNumber", label: "PO #", headerBg: "#FFD966", headerFg: "#000000" },
   { key: "line", label: "Line", headerBg: "#FFD966", headerFg: "#000000" },
   { key: "pur", label: "Pur", headerBg: "#FFD966", headerFg: "#C00000" },
   {
@@ -130,8 +130,6 @@ export const FILE_MESSAGES: FileMessage[] = [
   { file: "notes.docx", text: "Not a PDF" },
   { file: "delivery-note.pdf", text: "Not an AEM purchase order" },
 ];
-
-export const GOOD_FILES = ["PO-4500099001.pdf", "PO-4500099002.pdf"];
 
 export const LOADING_STEPS = [
   "Reading PO…",

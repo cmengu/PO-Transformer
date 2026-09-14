@@ -1,0 +1,18 @@
+{
+  "name": "po-transformer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "write-excel-file": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "fflate": "^0.8.3",
+    "typescript": "^5.9.2",
+    "vitest": "^5.0.0"
+  }
+}

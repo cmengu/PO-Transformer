@@ -66,6 +66,24 @@ import {
 } from "@/table/table";
 import { columnCellValue, flagNote, isFlagged, parseCell } from "./data";
 import { workflowStep } from "./workflow";
+import { reportTelemetry } from "@/telemetry/client";
+import {
+  browserFamily,
+  createReadAttempt,
+  isCorrectionField,
+  osFamily,
+  recordCorrection,
+  rowKey,
+  summarizeRows,
+} from "@/telemetry/metrics";
+import type {
+  BatchFinalizedEvent,
+  FailureCode,
+  BatchStartedEvent,
+  LocalAttempt,
+  LocalBatch,
+  TelemetryEvent,
+} from "@/telemetry/types";
 
 type ActiveColumnDrag = {
   session: ColumnDragSession;
@@ -235,6 +253,25 @@ function statusClass(status: QueuedFile["status"]): string {
   return "text-[#5c564e]";
 }
 
+function telemetryId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `telemetry-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function telemetryTime(): number {
+  return performance.now();
+}
+
+function telemetryContext(): Omit<BatchStartedEvent["batch"], "id" | "fileCount"> {
+  const userAgent = navigator.userAgent;
+  return {
+    appVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown",
+    parserVersion: process.env.NEXT_PUBLIC_PARSER_VERSION ?? "unknown",
+    browserFamily: browserFamily(userAgent),
+    osFamily: osFamily(userAgent),
+    environment: process.env.NODE_ENV === "production" ? "production" : "development",
+  };
+}
+
 export function DemoApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
@@ -250,6 +287,9 @@ export function DemoApp() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const latestTableRef = useRef(table);
+  const telemetryBatchRef = useRef<LocalBatch | null>(null);
+  const telemetryDispatchRef = useRef<Promise<void>>(Promise.resolve());
 
   function cancelColumnDrag() {
     if (columnDragFrameRef.current !== null) {
@@ -279,6 +319,10 @@ export function DemoApp() {
   }, [toast]);
 
   useEffect(() => {
+    latestTableRef.current = table;
+  }, [table]);
+
+  useEffect(() => {
     function cancelWithEscape(event: KeyboardEvent) {
       if (event.key !== "Escape" || !columnDragRef.current) return;
       cancelColumnDrag();
@@ -293,6 +337,123 @@ export function DemoApp() {
   const failedFiles = queue.filter((item) => item.status === "failed");
   const activeStep = workflowStep(queue, table.rows.length);
   const completedFileCount = queue.filter((item) => item.status === "completed").length;
+
+  function queueTelemetry(event: TelemetryEvent) {
+    telemetryDispatchRef.current = telemetryDispatchRef.current.then(() => reportTelemetry(event));
+  }
+
+  function ensureTelemetryBatch(): LocalBatch {
+    const existing = telemetryBatchRef.current;
+    if (existing) return existing;
+
+    const batch: LocalBatch = {
+      id: telemetryId(),
+      startedAt: telemetryTime(),
+      fileCount: queue.length,
+      retryCount: 0,
+      copyCount: 0,
+      downloadCount: 0,
+      attempts: [],
+    };
+    telemetryBatchRef.current = batch;
+    queueTelemetry({
+      type: "batch-started",
+      batch: { id: batch.id, fileCount: batch.fileCount, ...telemetryContext() },
+    });
+    for (const item of queue.filter((candidate) => candidate.status === "failed")) {
+      recordAttempt(
+        batch,
+        item,
+        null,
+        0,
+        item.detail === "Not a PDF" ? "invalid_file_type" : "unreadable_file",
+      );
+    }
+    return batch;
+  }
+
+  function recordAttempt(
+    batch: LocalBatch,
+    item: QueuedFile,
+    result: ReadResult | null,
+    durationMs: number,
+    failureOverride?: FailureCode,
+  ) {
+    const attempt = createReadAttempt(
+      telemetryId(),
+      item.id,
+      batch.attempts.filter((candidate) => candidate.itemId === item.id).length + 1,
+      item.file.size,
+      durationMs,
+      result,
+    );
+    if (failureOverride) attempt.failureCode = failureOverride;
+    batch.attempts.push(attempt);
+    queueTelemetry({
+      type: "attempt-recorded",
+      attempt: {
+        id: attempt.id,
+        batchId: batch.id,
+        attemptNumber: attempt.attemptNumber,
+        fileSizeBytes: attempt.fileSizeBytes,
+        durationMs: attempt.durationMs,
+        outcome: attempt.outcome,
+        failureCode: attempt.failureCode,
+        detectedRowCount: attempt.initial.detectedRowCount,
+        initiallyClearRowCount: attempt.initial.clearRowCount,
+        initiallyReviewRowCount: attempt.initial.reviewRowCount,
+        initialFlaggedCellCount: attempt.initial.flaggedCellCount,
+        obscuredFieldCount: attempt.initial.obscuredFieldCount,
+      },
+    });
+  }
+
+  function latestAttempts(batch: LocalBatch): LocalAttempt[] {
+    const byItem = new Map<string, LocalAttempt>();
+    for (const attempt of batch.attempts) byItem.set(attempt.itemId, attempt);
+    return [...byItem.values()];
+  }
+
+  function finalizationFor(attempt: LocalAttempt) {
+    const currentRows = latestTableRef.current.rows.filter((row) => attempt.rowKeys.includes(rowKey(row)));
+    const final = currentRows.length === attempt.rowKeys.length ? summarizeRows(currentRows) : attempt.initial;
+    return {
+      id: attempt.id,
+      finalReviewRowCount: final.reviewRowCount,
+      finalFlaggedCellCount: final.flaggedCellCount,
+      uniqueEditedCellCount: attempt.uniqueEditedCells.size,
+      editOperationCount: attempt.editOperationCount,
+      correctionsByField: attempt.correctionsByField,
+    };
+  }
+
+  function syncTelemetryBatch(abandoned: boolean) {
+    const batch = telemetryBatchRef.current;
+    if (!batch) return;
+
+    const attempts = latestAttempts(batch);
+    const finalizations = batch.attempts.map(finalizationFor);
+    const finalizationById = new Map(finalizations.map((attempt) => [attempt.id, attempt]));
+    const finalAttemptMetrics = attempts.map((attempt) => finalizationById.get(attempt.id)!);
+    const event: BatchFinalizedEvent = {
+      type: "batch-finalized",
+      batch: {
+        id: batch.id,
+        completeFileCount: attempts.filter((attempt) => attempt.outcome === "complete").length,
+        partialFileCount: attempts.filter((attempt) => attempt.outcome === "partial").length,
+        failedFileCount: attempts.filter((attempt) => attempt.outcome === "failed").length,
+        detectedRowCount: attempts.reduce((count, attempt) => count + attempt.initial.detectedRowCount, 0),
+        reviewRowCount: finalAttemptMetrics.reduce((count, attempt) => count + attempt.finalReviewRowCount, 0),
+        durationMs: Math.max(0, Math.round(telemetryTime() - batch.startedAt)),
+        retryCount: batch.retryCount,
+        copyCount: batch.copyCount,
+        downloadCount: batch.downloadCount,
+        abandoned,
+      },
+      attempts: finalizations,
+    };
+    queueTelemetry(event);
+  }
 
   function pickFiles() {
     fileInputRef.current?.click();
@@ -339,6 +500,7 @@ export function DemoApp() {
 
   async function processItems(items: QueuedFile[]) {
     if (isProcessing || items.length === 0) return;
+    const batch = ensureTelemetryBatch();
     setIsProcessing(true);
     try {
       const { readPo } = await import("@/read/read-po");
@@ -346,9 +508,11 @@ export function DemoApp() {
         setQueue((current) =>
           updateQueuedFile(current, item.id, "processing", "Reading purchase order…"),
         );
+        const startedAt = telemetryTime();
         try {
           const bytes = new Uint8Array(await item.file.arrayBuffer());
           const result: ReadResult = await readPo(item.file.name, bytes);
+          recordAttempt(batch, item, result, Math.max(0, Math.round(telemetryTime() - startedAt)));
           setTable((current) => addResults(current, [result]));
           if (result.kind === "rows") {
             setQueue((current) =>
@@ -365,6 +529,7 @@ export function DemoApp() {
             );
           }
         } catch {
+          recordAttempt(batch, item, null, Math.max(0, Math.round(telemetryTime() - startedAt)));
           setQueue((current) =>
             updateQueuedFile(current, item.id, "failed", "Could not process this file"),
           );
@@ -372,6 +537,7 @@ export function DemoApp() {
       }
     } finally {
       setIsProcessing(false);
+      syncTelemetryBatch(false);
     }
   }
 
@@ -381,6 +547,8 @@ export function DemoApp() {
 
   function retryFailedFiles() {
     if (isProcessing || failedFiles.length === 0) return;
+    const batch = ensureTelemetryBatch();
+    batch.retryCount += 1;
     setTable((current) =>
       clearFileMessages(current, failedFiles.map((item) => item.file.name)),
     );
@@ -401,6 +569,9 @@ export function DemoApp() {
     ) {
       return;
     }
+    const batch = telemetryBatchRef.current;
+    syncTelemetryBatch(Boolean(batch && batch.copyCount === 0 && batch.downloadCount === 0));
+    telemetryBatchRef.current = null;
     setTable(resetTable());
     setQueue([]);
     setQueueNotice(null);
@@ -644,6 +815,11 @@ export function DemoApp() {
 
   function onEdit(rowIndex: number, column: ColumnDefinition, value: string) {
     if (column.source) {
+      const row = table.rows[rowIndex];
+      if (row && isCorrectionField(column.source)) {
+        const batch = telemetryBatchRef.current;
+        if (batch) recordCorrection(batch.attempts, row, column.source);
+      }
       const parsed = parseCell(column.source, value);
       setTable((current) =>
         editCell(current, rowIndex, column.source!, parsed as never),
@@ -664,16 +840,29 @@ export function DemoApp() {
           "text/plain": new Blob([plain], { type: "text/plain" }),
         }),
       ])
-      .then(() => setToast("Copied — paste into your email"))
+      .then(() => {
+        const batch = telemetryBatchRef.current;
+        if (batch) {
+          batch.copyCount += 1;
+          syncTelemetryBatch(false);
+        }
+        setToast("Copied — paste into your email");
+      })
       .catch(() =>
         setToast("Copy didn't work in this browser — use Download Excel"),
       );
   }
 
   function onDownload() {
-    void import("@/output/download-excel").then(({ downloadExcel }) =>
-      downloadExcel(table.rows, columns),
-    );
+    void import("@/output/download-excel")
+      .then(({ downloadExcel }) => downloadExcel(table.rows, columns))
+      .then(() => {
+        const batch = telemetryBatchRef.current;
+        if (batch) {
+          batch.downloadCount += 1;
+          syncTelemetryBatch(false);
+        }
+      });
   }
 
   return (

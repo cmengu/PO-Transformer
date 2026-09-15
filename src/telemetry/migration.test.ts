@@ -9,6 +9,14 @@ const migration = readFileSync(
   'utf8',
 )
 
+const hardeningMigration = readFileSync(
+  new URL(
+    '../../supabase/migrations/20260915071000_harden_telemetry_retention_function.sql',
+    import.meta.url,
+  ),
+  'utf8',
+)
+
 describe('processing telemetry migration', () => {
   it('keeps PO content out of the telemetry schema', () => {
     expect(migration).not.toMatch(/\b(file_name|filename|po_number|description|unit_price|total)\b/i)
@@ -25,5 +33,9 @@ describe('processing telemetry migration', () => {
   it('schedules three-month telemetry retention', () => {
     expect(migration).toContain("now() - interval '3 months'")
     expect(migration).toContain("'purge-expired-po-processing-telemetry'")
+  })
+
+  it('keeps the security-definer cleanup job off exposed schemas', () => {
+    expect(hardeningMigration).toContain('set search_path = \'\';')
   })
 })

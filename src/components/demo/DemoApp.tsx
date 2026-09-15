@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent,
 } from "react";
 import type { ReadResult } from "@/domain/types";
@@ -31,7 +32,6 @@ import {
   deleteCustomColumn,
   hideBuiltInColumn,
   isBuiltInColumn,
-  moveColumnAround,
   moveColumnToIndex,
   parseColumnValue,
   renameCustomColumn,
@@ -39,6 +39,15 @@ import {
   type ColumnDefinition,
   type ColumnLayout,
 } from "@/table/columns";
+import {
+  createColumnDragSession,
+  draggedColumnOffset,
+  insertionMarker,
+  previewInsertionIndex,
+  withPreviewIndex,
+  type ColumnDragRect,
+  type ColumnDragSession,
+} from "@/table/column-drag";
 import type { TrackerTable } from "@/table/table";
 import {
   addResults,
@@ -54,9 +63,12 @@ import {
 import { columnCellValue, flagNote, isFlagged, parseCell } from "./data";
 import { workflowStep } from "./workflow";
 
-type DropTarget = {
-  id: string;
-  position: "before" | "after";
+type ActiveColumnDrag = {
+  session: ColumnDragSession;
+  pointerX: number;
+  clientX: number;
+  active: boolean;
+  keyboard: boolean;
 };
 
 type ColumnManagerProps = {
@@ -222,26 +234,25 @@ function statusClass(status: QueuedFile["status"]): string {
 export function DemoApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
-  const originalColumnsRef = useRef<ColumnDefinition[] | null>(null);
-  const pointerDragRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const columnDragRef = useRef<ActiveColumnDrag | null>(null);
+  const columnDragFrameRef = useRef<number | null>(null);
   const [table, setTable] = useState<TrackerTable>(createTable);
   const [layout, setLayout] = useState<ColumnLayout>(defaultColumnLayout);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [dragOverFiles, setDragOverFiles] = useState(false);
-  const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
-  const [previewColumns, setPreviewColumns] = useState<ColumnDefinition[] | null>(null);
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [columnDrag, setColumnDrag] = useState<ActiveColumnDrag | null>(null);
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   function cancelColumnDrag() {
-    pointerDragRef.current = null;
-    setPreviewColumns(null);
-    setDraggedColumnId(null);
-    setDropTarget(null);
-    originalColumnsRef.current = null;
+    if (columnDragFrameRef.current !== null) {
+      window.cancelAnimationFrame(columnDragFrameRef.current);
+      columnDragFrameRef.current = null;
+    }
+    columnDragRef.current = null;
+    setColumnDrag(null);
   }
 
   useEffect(() => {
@@ -264,14 +275,14 @@ export function DemoApp() {
 
   useEffect(() => {
     function cancelWithEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape" || !draggedColumnId) return;
+      if (event.key !== "Escape" || !columnDragRef.current) return;
       cancelColumnDrag();
     }
     window.addEventListener("keydown", cancelWithEscape);
     return () => window.removeEventListener("keydown", cancelWithEscape);
-  }, [draggedColumnId]);
+  }, []);
 
-  const columns = previewColumns ?? layout.columns;
+  const columns = layout.columns;
   const { label } = sheetStatus(table);
   const readyFiles = readyQueuedFiles(queue);
   const failedFiles = queue.filter((item) => item.status === "failed");
@@ -456,64 +467,171 @@ export function DemoApp() {
     });
   }
 
-  function previewAtPoint(clientX: number, clientY: number, draggedId: string) {
-    const target = document
-      .elementFromPoint(clientX, clientY)
-      ?.closest<HTMLTableCellElement>("th[data-column-id]");
-    const targetId = target?.dataset.columnId;
-    const original = originalColumnsRef.current;
-    if (!target || !targetId || !original) return null;
-    const bounds = target.getBoundingClientRect();
-    const position =
-      clientX < bounds.left + bounds.width / 2 ? "before" : "after";
-    return {
-      target: { id: targetId, position } satisfies DropTarget,
-      columns: moveColumnAround(original, draggedId, targetId, position),
-    };
-  }
-
-  function startColumnDrag(
-    event: PointerEvent<HTMLTableCellElement>,
-    id: string,
-  ) {
-    if (event.button !== 0 || (event.target as Element).closest("button")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    pointerDragRef.current = { id, x: event.clientX, y: event.clientY };
-  }
-
-  function previewColumnDrop(event: PointerEvent<HTMLTableCellElement>) {
-    const pending = pointerDragRef.current;
-    if (!pending) return;
-    const movedFarEnough =
-      Math.hypot(event.clientX - pending.x, event.clientY - pending.y) >= 6;
-    if (!draggedColumnId && !movedFarEnough) return;
-    if (!originalColumnsRef.current) originalColumnsRef.current = layout.columns;
-    if (!draggedColumnId) setDraggedColumnId(pending.id);
+  function pointerXInTable(clientX: number): number {
     const scrollContainer = tableScrollRef.current;
-    if (scrollContainer) {
-      const bounds = scrollContainer.getBoundingClientRect();
-      const edge = 48;
-      if (event.clientX < bounds.left + edge) scrollContainer.scrollLeft -= 18;
-      if (event.clientX > bounds.right - edge) scrollContainer.scrollLeft += 18;
-    }
-    const preview = previewAtPoint(event.clientX, event.clientY, pending.id);
-    if (!preview) return;
-    setDropTarget(preview.target);
-    setPreviewColumns(preview.columns);
+    if (!scrollContainer) return clientX;
+    return clientX - scrollContainer.getBoundingClientRect().left + scrollContainer.scrollLeft;
   }
 
-  function finishColumnDrag(event: PointerEvent<HTMLTableCellElement>) {
-    const pending = pointerDragRef.current;
-    pointerDragRef.current = null;
-    if (!pending || !originalColumnsRef.current) return;
-    const preview = previewAtPoint(event.clientX, event.clientY, pending.id);
-    if (preview) {
-      setLayout((current) => ({ ...current, columns: preview.columns }));
+  function measureColumnRects(): ColumnDragRect[] | null {
+    const scrollContainer = tableScrollRef.current;
+    if (!scrollContainer) return null;
+    const scrollBounds = scrollContainer.getBoundingClientRect();
+    const headers = Array.from(
+      scrollContainer.querySelectorAll<HTMLTableCellElement>("th[data-column-id]"),
+    );
+    const rects = columns.map((column) => {
+      const header = headers.find((candidate) => candidate.dataset.columnId === column.id);
+      if (!header) return null;
+      const bounds = header.getBoundingClientRect();
+      return {
+        id: column.id,
+        left: bounds.left - scrollBounds.left + scrollContainer.scrollLeft,
+        width: bounds.width,
+      };
+    });
+    return rects.some((rect) => rect === null)
+      ? null
+      : (rects as ColumnDragRect[]);
+  }
+
+  function publishColumnDrag(next: ActiveColumnDrag | null) {
+    columnDragRef.current = next;
+    setColumnDrag(next);
+  }
+
+  function updateColumnDrag(clientX: number) {
+    const current = columnDragRef.current;
+    if (!current || current.keyboard) return;
+    const pointerX = pointerXInTable(clientX);
+    const active =
+      current.active || Math.abs(pointerX - current.session.startPointerX) >= 8;
+    const previewIndex = active
+      ? previewInsertionIndex(current.session, pointerX, current.session.previewIndex)
+      : current.session.previewIndex;
+    publishColumnDrag({
+      ...current,
+      clientX,
+      pointerX,
+      active,
+      session: withPreviewIndex(current.session, previewIndex),
+    });
+  }
+
+  function continueAutoScroll() {
+    if (columnDragFrameRef.current !== null) return;
+    columnDragFrameRef.current = window.requestAnimationFrame(() => {
+      columnDragFrameRef.current = null;
+      const current = columnDragRef.current;
+      const scrollContainer = tableScrollRef.current;
+      if (!current || !current.active || current.keyboard || !scrollContainer) return;
+      const bounds = scrollContainer.getBoundingClientRect();
+      const edge = 72;
+      const leftPressure = Math.max(0, bounds.left + edge - current.clientX);
+      const rightPressure = Math.max(0, current.clientX - (bounds.right - edge));
+      const delta =
+        rightPressure > 0
+          ? Math.min(22, 4 + rightPressure / 3)
+          : leftPressure > 0
+            ? -Math.min(22, 4 + leftPressure / 3)
+            : 0;
+      if (delta === 0) return;
+      const before = scrollContainer.scrollLeft;
+      scrollContainer.scrollLeft += delta;
+      if (scrollContainer.scrollLeft === before) return;
+      updateColumnDrag(current.clientX);
+      continueAutoScroll();
+    });
+  }
+
+  function startColumnDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
+    if (event.button !== 0) return;
+    const rects = measureColumnRects();
+    const pointerX = pointerXInTable(event.clientX);
+    const session = rects
+      ? createColumnDragSession(columns.map((column) => column.id), rects, id, pointerX)
+      : null;
+    if (!session) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    publishColumnDrag({
+      session,
+      pointerX,
+      clientX: event.clientX,
+      active: false,
+      keyboard: false,
+    });
+  }
+
+  function previewColumnDrop(event: PointerEvent<HTMLButtonElement>) {
+    updateColumnDrag(event.clientX);
+    continueAutoScroll();
+  }
+
+  function finishColumnDrag(event: PointerEvent<HTMLButtonElement>) {
+    updateColumnDrag(event.clientX);
+    const current = columnDragRef.current;
+    if (current?.active && !current.keyboard) {
+      setLayout((existing) => ({
+        ...existing,
+        columns: moveColumnToIndex(
+          existing.columns,
+          current.session.id,
+          current.session.previewIndex,
+        ),
+      }));
     }
-    setDraggedColumnId(null);
-    setDropTarget(null);
-    setPreviewColumns(null);
-    originalColumnsRef.current = null;
+    cancelColumnDrag();
+  }
+
+  function startKeyboardColumnDrag(id: string) {
+    const ids = columns.map((column) => column.id);
+    const session = createColumnDragSession(
+      ids,
+      ids.map((columnId, index) => ({ id: columnId, left: index * 144, width: 144 })),
+      id,
+      0,
+    );
+    if (!session) return;
+    publishColumnDrag({ session, pointerX: 0, clientX: 0, active: true, keyboard: true });
+  }
+
+  function onColumnDragKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>, id: string) {
+    const current = columnDragRef.current;
+    const ownsKeyboardDrag = current?.keyboard && current.session.id === id;
+    if (!ownsKeyboardDrag && (event.key === " " || event.key === "Enter")) {
+      event.preventDefault();
+      startKeyboardColumnDrag(id);
+      return;
+    }
+    if (!ownsKeyboardDrag || !current) return;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      const nextIndex = Math.max(
+        0,
+        Math.min(
+          current.session.ids.length - 1,
+          current.session.previewIndex + (event.key === "ArrowLeft" ? -1 : 1),
+        ),
+      );
+      publishColumnDrag({
+        ...current,
+        session: withPreviewIndex(current.session, nextIndex),
+      });
+      return;
+    }
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      setLayout((existing) => ({
+        ...existing,
+        columns: moveColumnToIndex(
+          existing.columns,
+          current.session.id,
+          current.session.previewIndex,
+        ),
+      }));
+      cancelColumnDrag();
+    }
   }
 
   function onEdit(rowIndex: number, column: ColumnDefinition, value: string) {
@@ -772,28 +890,32 @@ export function DemoApp() {
               <thead>
                 <tr>
                   {columns.map((column, index) => {
-                    const slotBefore =
-                      dropTarget?.id === column.id &&
-                      dropTarget.position === "before";
-                    const slotAfter =
-                      dropTarget?.id === column.id &&
-                      dropTarget.position === "after";
+                    const marker = columnDrag?.active
+                      ? insertionMarker(columnDrag.session)
+                      : null;
+                    const slotBefore = marker?.beforeId === column.id;
+                    const slotAfter = marker?.afterId === column.id;
+                    const isDragged = columnDrag?.active && columnDrag.session.id === column.id;
+                    const offset = columnDrag?.active
+                      ? draggedColumnOffset(
+                        columnDrag.session,
+                        column.id,
+                        columnDrag.pointerX,
+                      )
+                      : 0;
                     return (
                       <th
                         key={column.id}
                         data-column-id={column.id}
-                        onPointerDown={(event) => startColumnDrag(event, column.id)}
-                        onPointerMove={previewColumnDrop}
-                        onPointerUp={finishColumnDrag}
-                        onPointerCancel={cancelColumnDrag}
-                        className={`relative min-w-36 touch-none select-none border border-[#d6d0c6] px-3 py-2 text-left font-semibold whitespace-nowrap transition-transform duration-150 ${
-                          draggedColumnId === column.id
-                            ? "cursor-grabbing opacity-50"
-                            : "cursor-grab"
+                        className={`relative min-w-36 select-none border border-[#d6d0c6] px-3 py-2 text-left font-semibold whitespace-nowrap ${
+                          isDragged ? "z-20 shadow-lg" : "z-0"
                         }`}
                         style={{
                           backgroundColor: column.headerBg,
                           color: column.headerFg,
+                          opacity: isDragged ? 0.9 : 1,
+                          transform: `translateX(${offset}px)`,
+                          transition: isDragged ? "none" : "transform 160ms ease",
                         }}
                       >
                         {slotBefore && (
@@ -809,7 +931,21 @@ export function DemoApp() {
                           />
                         )}
                         <div className="flex items-center gap-1.5">
-                          <span className="select-none text-[#7c746a]" aria-hidden="true">⠿</span>
+                          <button
+                            type="button"
+                            onPointerDown={(event) => startColumnDrag(event, column.id)}
+                            onPointerMove={previewColumnDrop}
+                            onPointerUp={finishColumnDrag}
+                            onPointerCancel={cancelColumnDrag}
+                            onKeyDown={(event) => onColumnDragKeyDown(event, column.id)}
+                            aria-label={`Reorder ${column.label}. Press Space, use arrow keys, then press Space to place it.`}
+                            aria-pressed={isDragged || undefined}
+                            className={`touch-none rounded px-1 text-[#5c564e] outline-offset-2 hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-[#1c1917] ${
+                              isDragged ? "cursor-grabbing" : "cursor-grab"
+                            }`}
+                          >
+                            <span aria-hidden="true">⠿</span>
+                          </button>
                           <span>{column.label}</span>
                           <span className="ml-auto flex items-center gap-0.5">
                             <button
@@ -865,12 +1001,26 @@ export function DemoApp() {
                       {columns.map((column) => {
                         const flagged =
                           column.source ? isFlagged(row, column.source) : false;
+                        const isCellDragged =
+                          columnDrag?.active && columnDrag.session.id === column.id;
+                        const cellOffset = columnDrag?.active
+                          ? draggedColumnOffset(
+                            columnDrag.session,
+                            column.id,
+                            columnDrag.pointerX,
+                          )
+                          : 0;
                         return (
                           <td
                             key={column.id}
-                            className="border border-[#e6ddd0] p-0 align-top"
+                            className={`relative border border-[#e6ddd0] p-0 align-top ${
+                              isCellDragged ? "z-10 shadow-lg" : "z-0"
+                            }`}
                             style={{
                               backgroundColor: flagged ? "#FFC7CE" : "#faf6ef",
+                              transform: `translateX(${cellOffset}px)`,
+                              transition:
+                                isCellDragged ? "none" : "transform 160ms ease",
                             }}
                           >
                             <input

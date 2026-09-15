@@ -1,29 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { databasePayload } from '@/telemetry/payload'
-import { telemetryEventSchema } from '@/telemetry/schema'
-
-const MAX_TELEMETRY_BYTES = 32 * 1024
+import { parseTelemetryRequest } from '@/telemetry/request'
 
 export async function POST(request: Request) {
-  const contentLength = Number(request.headers.get('content-length'))
-  if (Number.isFinite(contentLength) && contentLength > MAX_TELEMETRY_BYTES) {
-    return Response.json({ error: 'Payload too large.' }, { status: 413 })
-  }
-
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_TELEMETRY_BYTES) {
-    return Response.json({ error: 'Payload too large.' }, { status: 413 })
-  }
-
-  let input: unknown
-  try {
-    input = JSON.parse(text)
-  } catch {
-    return Response.json({ error: 'Invalid JSON.' }, { status: 400 })
-  }
-
-  const parsed = telemetryEventSchema.safeParse(input)
-  if (!parsed.success) return Response.json({ error: 'Invalid telemetry payload.' }, { status: 400 })
+  const parsed = await parseTelemetryRequest(request)
+  if ('response' in parsed) return parsed.response
 
   const supabase = await createClient()
   const {
@@ -31,7 +12,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser()
   if (!user) return Response.json({ error: 'Unauthenticated.' }, { status: 401 })
 
-  const payload = databasePayload(parsed.data, user.id)
+  const payload = databasePayload(parsed.event, user.id)
   if (payload.operation === 'insert' && payload.table === 'processing_batches') {
     const { error } = await supabase.from('processing_batches').insert(payload.row)
     if (error) return Response.json({ error: 'Could not record telemetry.' }, { status: 500 })

@@ -2,12 +2,19 @@ import { describe, expect, it } from 'vitest'
 import type { TrackerRow } from '../domain/types'
 import {
   columnFlagged,
+  columnLabelError,
   columnValue,
   createCustomColumn,
+  defaultColumnLayout,
   defaultColumns,
+  deleteCustomColumn,
+  hideBuiltInColumn,
   moveColumn,
+  moveColumnAround,
+  moveColumnToIndex,
   parseColumnValue,
   removeColumn,
+  restoreBuiltInColumn,
 } from './columns'
 
 const row: TrackerRow = {
@@ -30,6 +37,41 @@ describe('column definitions', () => {
     expect(moved[0].id).toBe('total')
     expect(columns[0].id).toBe('job')
     expect(removeColumn(moved, 'total').some((column) => column.id === 'total')).toBe(false)
+  })
+
+  it('previews a direct table-header drop before or after its target', () => {
+    const columns = defaultColumns().slice(0, 4)
+    expect(moveColumnAround(columns, 'poNumber', 'drawing', 'before').map((column) => column.id)).toEqual([
+      'job', 'poNumber', 'drawing', 'poDate',
+    ])
+    expect(moveColumnAround(columns, 'job', 'poDate', 'after').map((column) => column.id)).toEqual([
+      'drawing', 'poDate', 'job', 'poNumber',
+    ])
+    expect(moveColumnToIndex(columns, 'job', 99).at(-1)?.id).toBe('job')
+  })
+
+  it('hides and restores a built-in column while keeping custom columns visible', () => {
+    const layout = {
+      ...defaultColumnLayout(),
+      columns: [...defaultColumns(), createCustomColumn('customer', 'Customer')],
+    }
+    const hidden = hideBuiltInColumn(layout, 'poNumber')
+    expect(hidden.columns.some((column) => column.id === 'poNumber')).toBe(false)
+    expect(hidden.hiddenBuiltInColumns.map((column) => column.id)).toEqual(['poNumber'])
+    expect(hidden.columns.some((column) => column.id === 'customer')).toBe(true)
+
+    const restored = restoreBuiltInColumn(hidden, 'poNumber')
+    expect(restored.columns.some((column) => column.id === 'poNumber')).toBe(true)
+    expect(restored.hiddenBuiltInColumns).toEqual([])
+  })
+
+  it('only permanently deletes custom columns and validates names', () => {
+    const columns = [...defaultColumns(), createCustomColumn('customer', 'Customer')]
+    expect(deleteCustomColumn(columns, 'poNumber')).toBe(columns)
+    expect(deleteCustomColumn(columns, 'customer').some((column) => column.id === 'customer')).toBe(false)
+    expect(columnLabelError(columns, '  ')).toBe('Enter a column name')
+    expect(columnLabelError(columns, 'customer')).toBe('A column with this name already exists')
+    expect(columnLabelError(columns, 'Customer', 'customer')).toBeNull()
   })
 
   it('reads custom values and parses typed custom input', () => {

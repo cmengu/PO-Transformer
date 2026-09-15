@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ReadResult, TrackerRow } from '../domain/types'
-import { addResults, createTable, editCell, editCustomCell, flaggedCellCount, resetTable, sheetStatus } from './table'
+import { addResults, clearFileMessages, createTable, editCell, editCustomCell, flaggedCellCount, removeCustomColumnValues, resetTable, sheetStatus } from './table'
 
 function row(overrides: Partial<TrackerRow> & Pick<TrackerRow, 'poNumber' | 'line'>): TrackerRow {
   return {
@@ -210,5 +210,32 @@ describe('tracker table', () => {
       showSheet: true,
       label: 'All cells look complete',
     })
+  })
+
+  it('removes deleted custom-column values without changing tracker data', () => {
+    const table = addResults(createTable(), [
+      rowsResult('a.pdf', [row({
+        poNumber: '4500011111',
+        line: 10,
+        customValues: { customer: 'Acme', batch: '7' },
+      })]),
+    ])
+
+    const cleaned = removeCustomColumnValues(table, ['customer'])
+    expect(cleaned.rows[0]).toMatchObject({
+      poNumber: '4500011111',
+      customValues: { batch: '7' },
+    })
+  })
+
+  it('clears stale file messages before a retry', () => {
+    const table = addResults(createTable(), [
+      { file: 'scan.pdf', kind: 'issue', issue: 'no-text' },
+      { file: 'other.pdf', kind: 'issue', issue: 'not-aem' },
+    ])
+
+    expect(clearFileMessages(table, ['scan.pdf']).messages).toEqual([
+      { file: 'other.pdf', message: 'Not an AEM purchase order' },
+    ])
   })
 })

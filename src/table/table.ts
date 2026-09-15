@@ -64,7 +64,7 @@ export function sheetStatus(table: TrackerTable): {
   }
 }
 
-function issueMessage(issue: 'not-pdf' | 'no-text' | 'not-aem'): string {
+export function issueMessage(issue: 'not-pdf' | 'no-text' | 'not-aem'): string {
   if (issue === 'not-pdf') return 'Not a PDF'
   if (issue === 'no-text') return "Can't be read — looks scanned"
   return 'Not an AEM purchase order'
@@ -131,4 +131,33 @@ export function editCustomCell(
     }
   })
   return { ...table, rows }
+}
+
+export function removeCustomColumnValues(
+  table: TrackerTable,
+  columnIds: string[],
+): TrackerTable {
+  const ids = new Set(columnIds)
+  const rows = table.rows.map((row) => {
+    if (!row.customValues) return row
+    const customValues = Object.fromEntries(
+      Object.entries(row.customValues).filter(([id]) => !ids.has(id)),
+    )
+    return {
+      ...row,
+      ...(Object.keys(customValues).length > 0 ? { customValues } : { customValues: undefined }),
+    }
+  })
+  return { ...table, rows }
+}
+
+export function clearFileMessages(
+  table: TrackerTable,
+  files: string[],
+): TrackerTable {
+  const names = new Set(files)
+  return {
+    ...table,
+    messages: table.messages.filter((message) => !names.has(message.file)),
+  }
 }

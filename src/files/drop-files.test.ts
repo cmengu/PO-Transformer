@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractDroppedFiles, fileDropUnavailableMessage } from "./drop-files";
+import {
+  extractClipboardPdfFiles,
+  extractDroppedFiles,
+  fileDropUnavailableMessage,
+} from "./drop-files";
 
 function file(name: string): File {
   return new File(["%PDF"], name, { type: "application/pdf" });
@@ -31,6 +35,19 @@ describe("extractDroppedFiles", () => {
     expect(extractDroppedFiles({ items: [{ kind: "string", getAsFile: () => null }] }))
       .toEqual({ files: [], source: "unavailable" });
     expect(fileDropUnavailableMessage({ types: ["text/uri-list"] }))
-      .toContain("Save the PDF");
+      .toContain("link was received");
+  });
+
+  it("creates local files from copied PDF clipboard entries", async () => {
+    const files = await extractClipboardPdfFiles([
+      {
+        types: ["text/plain", "application/pdf"],
+        getType: async (type) => new Blob([type === "application/pdf" ? "%PDF" : "note"], { type }),
+      },
+    ]);
+
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({ name: "Pasted purchase order.pdf", type: "application/pdf" });
+    await expect(files[0].text()).resolves.toBe("%PDF");
   });
 });

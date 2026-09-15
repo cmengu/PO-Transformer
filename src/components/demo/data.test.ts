@@ -5,7 +5,7 @@ import { flagNote, isFlagged } from './data'
 const row: TrackerRow = {
   job: '',
   drawing: '',
-  pur: '',
+  pur: 'JSMITH',
   poDate: '31/02/2026',
   poNumber: '4500011111',
   line: 10,
@@ -32,5 +32,13 @@ describe('demo cell warnings', () => {
   it('explains whether a date is invalid or unavailable', () => {
     expect(flagNote(row, 'poDate')).toBe('Invalid date: 31/02/2026 — enter DD/MM/YYYY')
     expect(flagNote(row, 'requested')).toBe('Date unavailable — please check PO')
+  })
+
+  it('highlights missing required cells but leaves intentional blanks alone', () => {
+    const missing = { ...row, description: '' }
+    expect(isFlagged(missing, 'description')).toBe(true)
+    expect(flagNote(missing, 'description')).toBe('Missing data — please check PO')
+    expect(isFlagged(row, 'job')).toBe(false)
+    expect(isFlagged(row, 'drawing')).toBe(false)
   })
 })

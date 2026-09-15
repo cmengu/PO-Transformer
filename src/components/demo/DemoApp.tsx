@@ -20,6 +20,7 @@ import {
   type QueuedFile,
 } from "@/files/file-queue";
 import {
+  extractClipboardPdfFiles,
   extractDroppedFiles,
   fileDropUnavailableMessage,
 } from "@/files/drop-files";
@@ -65,7 +66,7 @@ import {
   sheetStatus,
 } from "@/table/table";
 import { columnCellValue, flagNote, isFlagged, parseCell } from "./data";
-import { workflowStep } from "./workflow";
+import { workflowStepState, type WorkflowStep } from "./workflow";
 import { reportTelemetry } from "@/telemetry/client";
 import {
   browserFamily,
@@ -92,6 +93,8 @@ type ActiveColumnDrag = {
   active: boolean;
   keyboard: boolean;
 };
+
+const COPY_HEADERS_PREFERENCE_KEY = "po-transformer.copy-headers.v1";
 
 type ColumnManagerProps = {
   layout: ColumnLayout;
@@ -274,6 +277,7 @@ function telemetryContext(): Omit<BatchStartedEvent["batch"], "id" | "fileCount"
 
 export function DemoApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const fileDragDepthRef = useRef(0);
   const columnDragRef = useRef<ActiveColumnDrag | null>(null);
@@ -287,6 +291,8 @@ export function DemoApp() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [includeColumnHeadings, setIncludeColumnHeadings] = useState(true);
+  const [copyPreferencesLoaded, setCopyPreferencesLoaded] = useState(false);
   const latestTableRef = useRef(table);
   const telemetryBatchRef = useRef<LocalBatch | null>(null);
   const telemetryDispatchRef = useRef<Promise<void>>(Promise.resolve());
@@ -313,6 +319,24 @@ export function DemoApp() {
   }, [layout, layoutLoaded]);
 
   useEffect(() => {
+    const restore = window.setTimeout(() => {
+      setIncludeColumnHeadings(
+        window.localStorage.getItem(COPY_HEADERS_PREFERENCE_KEY) !== "false",
+      );
+      setCopyPreferencesLoaded(true);
+    }, 0);
+    return () => window.clearTimeout(restore);
+  }, []);
+
+  useEffect(() => {
+    if (!copyPreferencesLoaded) return;
+    window.localStorage.setItem(
+      COPY_HEADERS_PREFERENCE_KEY,
+      String(includeColumnHeadings),
+    );
+  }, [copyPreferencesLoaded, includeColumnHeadings]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timer);
@@ -335,7 +359,6 @@ export function DemoApp() {
   const { label } = sheetStatus(table);
   const readyFiles = readyQueuedFiles(queue);
   const failedFiles = queue.filter((item) => item.status === "failed");
-  const activeStep = workflowStep(queue, table.rows.length);
   const completedFileCount = queue.filter((item) => item.status === "completed").length;
 
   function queueTelemetry(event: TelemetryEvent) {
@@ -482,7 +505,10 @@ export function DemoApp() {
       }));
   }
 
-  function stageFiles(files: File[], source: "browse" | "attachment" = "browse") {
+  function stageFiles(
+    files: File[],
+    source: "browse" | "attachment" | "clipboard" = "browse",
+  ) {
     if (files.length === 0) return;
     fileDragDepthRef.current = 0;
     setDragOverFiles(false);
@@ -493,9 +519,44 @@ export function DemoApp() {
         ? `${result.skippedDuplicateCount} duplicate file${result.skippedDuplicateCount === 1 ? " was" : "s were"} skipped`
         : source === "attachment"
           ? `${result.added.length} email attachment${result.added.length === 1 ? "" : "s"} added to the queue`
+          : source === "clipboard"
+            ? `${result.added.length} pasted PDF${result.added.length === 1 ? "" : "s"} added to the queue`
           : null,
     );
     void validateQueuedItems(result.added);
+  }
+
+  function stageTransferFiles(
+    payload: DataTransfer,
+    source: "attachment" | "clipboard",
+  ) {
+    const dropped = extractDroppedFiles(payload);
+    if (dropped.files.length > 0) {
+      stageFiles(dropped.files, source);
+      return;
+    }
+    setDragOverFiles(false);
+    setQueueNotice(fileDropUnavailableMessage(payload));
+  }
+
+  async function pastePdfFromClipboard() {
+    if (!navigator.clipboard?.read) {
+      dropZoneRef.current?.focus();
+      setQueueNotice("Click this box and press Ctrl+V to paste a PDF attachment.");
+      return;
+    }
+    try {
+      const files = await extractClipboardPdfFiles(await navigator.clipboard.read());
+      if (files.length > 0) {
+        stageFiles(files, "clipboard");
+        return;
+      }
+      dropZoneRef.current?.focus();
+      setQueueNotice("No PDF was found in the clipboard. Copy the PDF attachment, then press Ctrl+V here.");
+    } catch {
+      dropZoneRef.current?.focus();
+      setQueueNotice("Clipboard access was blocked. Click this box and press Ctrl+V to paste a PDF attachment.");
+    }
   }
 
   async function processItems(items: QueuedFile[]) {
@@ -832,7 +893,9 @@ export function DemoApp() {
   }
 
   function onCopy() {
-    const { html, plain } = clipboardPayload(table.rows, columns);
+    const { html, plain } = clipboardPayload(table.rows, columns, {
+      includeHeaders: includeColumnHeadings,
+    });
     void navigator.clipboard
       .write([
         new ClipboardItem({
@@ -894,22 +957,26 @@ export function DemoApp() {
 
       <main className="mx-auto max-w-6xl space-y-6">
         <ol aria-label="Three-step workflow" className="grid gap-2 sm:grid-cols-3">
-          {[
+          {([
             ["add", "1", "Add purchase orders", "Choose PDFs without starting processing."],
             ["check", "2", "Check and process", "Review the queue, then approve the batch."],
             ["review", "3", "Review and export", "Check highlights, then copy or download."],
-          ].map(([step, number, title, description]) => {
-            const isActive = activeStep === step;
+          ] as const).map(([step, number, title, description]) => {
+            const state = workflowStepState(step as WorkflowStep, queue, table.rows.length);
             return (
               <li
                 key={step}
                 className={`rounded-2xl border px-4 py-3 ${
-                  isActive
-                    ? "border-[#1c1917] bg-[#fffdf8] shadow-sm"
-                    : "border-[#ddd4c8] bg-[#eee7db] text-[#6c655c]"
+                  state === "complete"
+                    ? "border-[#28633a] bg-[#e4f1e7] text-[#1f5130]"
+                    : state === "active"
+                      ? "border-[#1c1917] bg-[#fffdf8] shadow-sm"
+                      : "border-[#ddd4c8] bg-[#eee7db] text-[#6c655c]"
                 }`}
               >
-                <p className="text-xs font-semibold tracking-wide uppercase">Step {number}</p>
+                <p className="text-xs font-semibold tracking-wide uppercase">
+                  {state === "complete" ? "✓ Complete · " : ""}Step {number}
+                </p>
                 <p className="mt-1 font-medium">{title}</p>
                 <p className="mt-1 text-xs">{description}</p>
               </li>
@@ -918,6 +985,9 @@ export function DemoApp() {
         </ol>
 
         <section
+          ref={dropZoneRef}
+          tabIndex={0}
+          aria-label="Add purchase order PDFs. Drop or paste PDF attachments here."
           onDragEnter={(event) => {
             event.preventDefault();
             fileDragDepthRef.current += 1;
@@ -936,13 +1006,11 @@ export function DemoApp() {
           onDrop={(event) => {
             event.preventDefault();
             fileDragDepthRef.current = 0;
-            const dropped = extractDroppedFiles(event.dataTransfer);
-            if (dropped.files.length > 0) {
-              stageFiles(dropped.files, "attachment");
-              return;
-            }
-            setDragOverFiles(false);
-            setQueueNotice(fileDropUnavailableMessage(event.dataTransfer));
+            stageTransferFiles(event.dataTransfer, "attachment");
+          }}
+          onPaste={(event) => {
+            event.preventDefault();
+            stageTransferFiles(event.clipboardData, "clipboard");
           }}
           className={`rounded-[1.5rem] border-2 border-dashed p-5 transition ${
             dragOverFiles
@@ -955,19 +1023,28 @@ export function DemoApp() {
               <p className="text-xs font-semibold tracking-wide uppercase text-[#7c746a]">Step 1</p>
               <h2 className="mt-1 font-serif text-2xl">Add purchase order PDFs</h2>
               <p className="mt-1 text-sm text-[#5c564e]">
-                Drop PDFs here or choose them from your computer. Add several files at once; nothing starts until you select Process.
+                Drop, paste, or choose PDFs. Add several files at once; nothing starts until you select Process.
               </p>
               <p className="mt-2 text-xs text-[#7c746a]">
-                From Outlook, Gmail, or another email app, drag the PDF attachment itself into this box—not the email message.
+                From iSharing, Outlook, Gmail, or another email app, drag or paste the PDF attachment itself—not the email message.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={pickFiles}
-              className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
-            >
-              Choose PDF files
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void pastePdfFromClipboard()}
+                className="rounded-full border border-[#1c1917] px-4 py-2 text-sm"
+              >
+                Paste PDF
+              </button>
+              <button
+                type="button"
+                onClick={pickFiles}
+                className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
+              >
+                Choose PDF files
+              </button>
+            </div>
           </div>
 
           {queue.length === 0 && queueNotice && (
@@ -1068,6 +1145,15 @@ export function DemoApp() {
             <div className="flex flex-wrap items-center gap-2">
               {table.rows.length > 0 && (
                 <>
+                  <label className="flex items-center gap-2 rounded-full border border-[#c4b8a6] px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeColumnHeadings}
+                      onChange={(event) => setIncludeColumnHeadings(event.target.checked)}
+                      className="size-4 accent-[#28633a]"
+                    />
+                    Include headings
+                  </label>
                   <button
                     type="button"
                     onClick={onCopy}
@@ -1233,7 +1319,7 @@ export function DemoApp() {
                               isCellDragged ? "z-10 shadow-lg" : "z-0"
                             }`}
                             style={{
-                              backgroundColor: flagged ? "#FFC7CE" : "#faf6ef",
+                              backgroundColor: flagged ? "#FED7AA" : "#faf6ef",
                               transform: `translateX(${cellOffset}px)`,
                               transition:
                                 isCellDragged ? "none" : "transform 160ms ease",
@@ -1248,7 +1334,7 @@ export function DemoApp() {
                               aria-label={`${column.label} row ${rowIndex + 1}`}
                             />
                             {flagged && (
-                              <p className="px-3 pb-2 text-[11px] text-[#9c1c1c]">
+                              <p className="px-3 pb-2 text-[11px] text-[#9A3412]">
                                 {column.source ? flagNote(row, column.source) : ""}
                               </p>
                             )}

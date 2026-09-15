@@ -6,7 +6,7 @@ function row(overrides: Partial<TrackerRow> & Pick<TrackerRow, 'poNumber' | 'lin
   return {
     job: '',
     drawing: '',
-    pur: '',
+    pur: 'JSMITH',
     poDate: '03/09/2026',
     project: 'B9001-AA100',
     rev: '02',
@@ -78,8 +78,38 @@ describe('tracker table', () => {
     expect(sheetStatus(started)).toEqual({ showSheet: true, label: '2 cells to check' })
 
     const corrected = editCell(started, 0, 'unitPrice', 12.5)
-    expect(corrected.rows[0]).toMatchObject({ unitPrice: 12.5, obscured: ['total'] })
-    expect(sheetStatus(corrected)).toEqual({ showSheet: true, label: '1 cell to check' })
+    expect(corrected.rows[0]).toMatchObject({ unitPrice: 12.5, total: 50 })
+    expect(corrected.rows[0].obscured).toBeUndefined()
+    expect(sheetStatus(corrected)).toEqual({ showSheet: true, label: 'All cells look complete' })
+  })
+
+  it('calculates a missing total when unit price is entered and quantity is present', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10, qty: 3, unitPrice: null, total: null })]),
+    ])
+
+    const table = editCell(started, 0, 'unitPrice', 12.345)
+
+    expect(table.rows[0]).toMatchObject({ qty: 3, unitPrice: 12.345, total: 37.04 })
+  })
+
+  it('does not overwrite an existing total when unit price is edited', () => {
+    const started = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10, qty: 3, unitPrice: null, total: 40 })]),
+    ])
+
+    const table = editCell(started, 0, 'unitPrice', 12.5)
+
+    expect(table.rows[0].total).toBe(40)
+  })
+
+  it('flags every missing built-in value except job and engineering drawing', () => {
+    const table = addResults(createTable(), [
+      rowsResult('a.pdf', [row({ poNumber: '4500011111', line: 10, pur: '', description: '', qty: null })]),
+    ])
+
+    expect(flaggedCellCount(table)).toBe(3)
+    expect(sheetStatus(table)).toEqual({ showSheet: true, label: '3 cells to check' })
   })
 
   it('updates an edited cell and clears that field flag when the value is non-empty', () => {

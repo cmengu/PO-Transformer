@@ -1,4 +1,5 @@
 import type { DateField, ObscuredPriceField, TrackerRow } from "../../domain/types";
+import { cellNeedsAttention, isMissingRequiredValue, type RequiredCellField } from "../../domain/validation";
 import {
   DEFAULT_COLUMNS,
   columnValue,
@@ -27,19 +28,8 @@ export function columnCellValue(row: TrackerRow, column: ColumnDefinition): stri
 }
 
 export function isFlagged(row: TrackerRow, key: ColumnKey): boolean {
-  if (key === "poDate" || key === "requested") {
-    return (
-      row.dateIssues?.[key as DateField] !== undefined ||
-      (key === "requested" && row.flags.includes(key))
-    );
-  }
-  if (key === "project" || key === "rev") {
-    return row.flags.includes(key);
-  }
-  return (
-    (key === "unitPrice" || key === "total") &&
-    row.obscured?.includes(key as ObscuredPriceField) === true
-  );
+  if (key === "job" || key === "drawing") return false;
+  return cellNeedsAttention(row, key as RequiredCellField);
 }
 
 export function flagNote(row: TrackerRow, key: ColumnKey): string {
@@ -49,6 +39,9 @@ export function flagNote(row: TrackerRow, key: ColumnKey): string {
       return `Invalid date${issue.raw ? `: ${issue.raw}` : ""} — enter DD/MM/YYYY`;
     }
     if (issue?.kind === "missing") return "Date unavailable — please check PO";
+  }
+  if (key !== "job" && key !== "drawing" && isMissingRequiredValue(row, key as RequiredCellField)) {
+    return "Missing data — please check PO";
   }
   return row.obscured?.includes(key as ObscuredPriceField)
     ? OBSCURED_NOTE

@@ -161,6 +161,15 @@ describe('clipboardPayload', () => {
     expect(plain).toBe(['Customer\tPO #', 'Acme Precision\t4500011111'].join('\n'))
   })
 
+  it('can omit headings from both clipboard formats', () => {
+    const columns = [defaultColumns()[3], defaultColumns()[6]]
+    const { html, plain } = clipboardPayload(twoPoRows, columns, { includeHeaders: false })
+
+    expect(plain).toBe(['4500011111\tB9001-AA100', '4500022222\tC8002-BB200'].join('\n'))
+    expect(html).not.toContain('<th')
+    expect(html).not.toContain('PO #')
+  })
+
   it('puts padding, background and font on every th and td', () => {
     const { html } = clipboardPayload(twoPoRows)
     const cells = [...html.matchAll(/<(?:th|td)\b[^>]*>/g)].map((match) => match[0])

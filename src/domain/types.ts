@@ -10,7 +10,7 @@ export type DateIssue = {
 export type TrackerRow = {
   job: ''
   drawing: ''
-  pur: ''
+  pur: string
   poDate: string
   poNumber: string
   line: number

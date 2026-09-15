@@ -1,5 +1,6 @@
 import type { ReadResult, TrackerRow } from '../domain/types'
 import { parseDateField } from '../domain/dates'
+import { cellNeedsAttention, REQUIRED_CELL_FIELDS } from '../domain/validation'
 
 export type FileMessage = {
   file: string
@@ -44,9 +45,13 @@ export function addResults(table: TrackerTable, results: ReadResult[]): TrackerT
 
 export function flaggedCellCount(table: TrackerTable): number {
   return table.rows.reduce(
-    (n, row) => n + row.flags.length + (row.obscured?.length ?? 0) + (row.dateIssues?.poDate ? 1 : 0),
+    (count, row) => count + REQUIRED_CELL_FIELDS.filter((field) => cellNeedsAttention(row, field)).length,
     0,
   )
+}
+
+function calculatedTotal(quantity: number, unitPrice: number): number {
+  return Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100
 }
 
 export function sheetStatus(table: TrackerTable): {
@@ -79,6 +84,14 @@ export function editCell<K extends keyof TrackerRow>(
   const rows = table.rows.map((row, index) => {
     if (index !== rowIndex) return row
     const next: TrackerRow = { ...row, [field]: value }
+    if (field === 'unitPrice' && row.qty != null && value != null && row.total == null) {
+      next.total = calculatedTotal(row.qty, value as number)
+      if (row.obscured?.includes('total')) {
+        const obscured = row.obscured.filter((obscuredField) => obscuredField !== 'total')
+        if (obscured.length > 0) next.obscured = obscured
+        else delete next.obscured
+      }
+    }
     if (field === 'poDate' || field === 'requested') {
       const text = String(value ?? '')
       const parsed = parseDateField(text)
@@ -104,8 +117,8 @@ export function editCell<K extends keyof TrackerRow>(
       next.flags = row.flags.filter((flag) => flag !== field)
       if (text.trim() === '') next.flags.push(field)
     }
-    if ((field === 'unitPrice' || field === 'total') && row.obscured?.includes(field)) {
-      const obscured = row.obscured.filter((value) => value !== field)
+    if ((field === 'unitPrice' || field === 'total') && next.obscured?.includes(field)) {
+      const obscured = next.obscured.filter((value) => value !== field)
       if (obscured.length > 0) next.obscured = obscured
       else delete next.obscured
     }

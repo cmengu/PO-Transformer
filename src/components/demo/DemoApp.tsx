@@ -19,6 +19,10 @@ import {
   validatePdfFile,
   type QueuedFile,
 } from "@/files/file-queue";
+import {
+  extractDroppedFiles,
+  fileDropUnavailableMessage,
+} from "@/files/drop-files";
 import { clipboardPayload } from "@/output/clipboard";
 import {
   loadColumnLayout,
@@ -234,6 +238,7 @@ function statusClass(status: QueuedFile["status"]): string {
 export function DemoApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tableScrollRef = useRef<HTMLDivElement>(null);
+  const fileDragDepthRef = useRef(0);
   const columnDragRef = useRef<ActiveColumnDrag | null>(null);
   const columnDragFrameRef = useRef<number | null>(null);
   const [table, setTable] = useState<TrackerTable>(createTable);
@@ -316,15 +321,18 @@ export function DemoApp() {
       }));
   }
 
-  function stageFiles(files: File[]) {
+  function stageFiles(files: File[], source: "browse" | "attachment" = "browse") {
     if (files.length === 0) return;
+    fileDragDepthRef.current = 0;
     setDragOverFiles(false);
     const result = enqueueFiles(queue, files);
     setQueue(result.queue);
     setQueueNotice(
       result.skippedDuplicateCount > 0
         ? `${result.skippedDuplicateCount} duplicate file${result.skippedDuplicateCount === 1 ? " was" : "s were"} skipped`
-        : null,
+        : source === "attachment"
+          ? `${result.added.length} email attachment${result.added.length === 1 ? "" : "s"} added to the queue`
+          : null,
     );
     void validateQueuedItems(result.added);
   }
@@ -721,18 +729,31 @@ export function DemoApp() {
         </ol>
 
         <section
+          onDragEnter={(event) => {
+            event.preventDefault();
+            fileDragDepthRef.current += 1;
+            setDragOverFiles(true);
+          }}
           onDragOver={(event) => {
             event.preventDefault();
             setDragOverFiles(true);
           }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          onDragLeave={() => {
+            fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
+            if (fileDragDepthRef.current === 0) {
               setDragOverFiles(false);
             }
           }}
           onDrop={(event) => {
             event.preventDefault();
-            stageFiles(Array.from(event.dataTransfer.files));
+            fileDragDepthRef.current = 0;
+            const dropped = extractDroppedFiles(event.dataTransfer);
+            if (dropped.files.length > 0) {
+              stageFiles(dropped.files, "attachment");
+              return;
+            }
+            setDragOverFiles(false);
+            setQueueNotice(fileDropUnavailableMessage(event.dataTransfer));
           }}
           className={`rounded-[1.5rem] border-2 border-dashed p-5 transition ${
             dragOverFiles
@@ -748,7 +769,7 @@ export function DemoApp() {
                 Drop PDFs here or choose them from your computer. Add several files at once; nothing starts until you select Process.
               </p>
               <p className="mt-2 text-xs text-[#7c746a]">
-                From email, drag the PDF attachment itself into this box—not the email message.
+                From Outlook, Gmail, or another email app, drag the PDF attachment itself into this box—not the email message.
               </p>
             </div>
             <button
@@ -759,6 +780,12 @@ export function DemoApp() {
               Choose PDF files
             </button>
           </div>
+
+          {queue.length === 0 && queueNotice && (
+            <p className="mt-3 text-sm text-[#7a2e22]" role="status">
+              {queueNotice}
+            </p>
+          )}
 
           {queue.length > 0 && (
             <>

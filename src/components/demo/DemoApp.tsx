@@ -52,6 +52,7 @@ import {
   sheetStatus,
 } from "@/table/table";
 import { columnCellValue, flagNote, isFlagged, parseCell } from "./data";
+import { workflowStep } from "./workflow";
 
 type DropTarget = {
   id: string;
@@ -274,6 +275,8 @@ export function DemoApp() {
   const { label } = sheetStatus(table);
   const readyFiles = readyQueuedFiles(queue);
   const failedFiles = queue.filter((item) => item.status === "failed");
+  const activeStep = workflowStep(queue, table.rows.length);
+  const completedFileCount = queue.filter((item) => item.status === "completed").length;
 
   function pickFiles() {
     fileInputRef.current?.click();
@@ -373,6 +376,12 @@ export function DemoApp() {
   }
 
   function startOver() {
+    if (
+      (table.rows.length > 0 || queue.length > 0) &&
+      !window.confirm("Start over? This clears the current table and file queue.")
+    ) {
+      return;
+    }
     setTable(resetTable());
     setQueue([]);
     setQueueNotice(null);
@@ -407,6 +416,14 @@ export function DemoApp() {
   }
 
   function deleteColumn(id: string) {
+    const column = layout.columns.find((candidate) => candidate.id === id);
+    if (
+      column &&
+      !isBuiltInColumn(column) &&
+      !window.confirm(`Delete the custom column \"${column.label}\" and its table entries?`)
+    ) {
+      return;
+    }
     setLayout((current) => ({
       ...current,
       columns: deleteCustomColumn(current.columns, id),
@@ -415,6 +432,13 @@ export function DemoApp() {
   }
 
   function resetColumns() {
+    if (
+      (layout.hiddenBuiltInColumns.length > 0 ||
+        layout.columns.some((column) => !isBuiltInColumn(column))) &&
+      !window.confirm("Reset columns to the standard layout? Custom column entries will be removed.")
+    ) {
+      return;
+    }
     const customColumnIds = layout.columns
       .filter((column) => !isBuiltInColumn(column))
       .map((column) => column.id);
@@ -554,11 +578,159 @@ export function DemoApp() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6">
+        <ol aria-label="Three-step workflow" className="grid gap-2 sm:grid-cols-3">
+          {[
+            ["add", "1", "Add purchase orders", "Choose PDFs without starting processing."],
+            ["check", "2", "Check and process", "Review the queue, then approve the batch."],
+            ["review", "3", "Review and export", "Check highlights, then copy or download."],
+          ].map(([step, number, title, description]) => {
+            const isActive = activeStep === step;
+            return (
+              <li
+                key={step}
+                className={`rounded-2xl border px-4 py-3 ${
+                  isActive
+                    ? "border-[#1c1917] bg-[#fffdf8] shadow-sm"
+                    : "border-[#ddd4c8] bg-[#eee7db] text-[#6c655c]"
+                }`}
+              >
+                <p className="text-xs font-semibold tracking-wide uppercase">Step {number}</p>
+                <p className="mt-1 font-medium">{title}</p>
+                <p className="mt-1 text-xs">{description}</p>
+              </li>
+            );
+          })}
+        </ol>
+
+        <section
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragOverFiles(true);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setDragOverFiles(false);
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            stageFiles(Array.from(event.dataTransfer.files));
+          }}
+          className={`rounded-[1.5rem] border-2 border-dashed p-5 transition ${
+            dragOverFiles
+              ? "border-[#1c1917] bg-[#ece4d6]"
+              : "border-[#c4b8a6] bg-[#faf6ef]"
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold tracking-wide uppercase text-[#7c746a]">Step 1</p>
+              <h2 className="mt-1 font-serif text-2xl">Add purchase order PDFs</h2>
+              <p className="mt-1 text-sm text-[#5c564e]">
+                Drop PDFs here or choose them from your computer. Add several files at once; nothing starts until you select Process.
+              </p>
+              <p className="mt-2 text-xs text-[#7c746a]">
+                From email, drag the PDF attachment itself into this box—not the email message.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={pickFiles}
+              className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
+            >
+              Choose PDF files
+            </button>
+          </div>
+
+          {queue.length > 0 && (
+            <>
+              <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold tracking-wide uppercase text-[#7c746a]">Step 2</p>
+                  <h3 className="mt-1 font-serif text-xl">Check your files</h3>
+                </div>
+                <p className="text-sm text-[#5c564e]">
+                  {readyFiles.length > 0
+                    ? `${readyFiles.length} ready to process`
+                    : "Waiting for file checks to finish"}
+                </p>
+              </div>
+              <ul className="mt-4 divide-y divide-[#e6ddd0] rounded-xl border border-[#e6ddd0] bg-[#fffdf8]">
+                {queue.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{item.file.name}</p>
+                      <p className="text-xs text-[#7c746a]">{fileSize(item.file.size)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs ${statusClass(item.status)}`}>
+                        {item.detail}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isProcessing || item.status === "processing"}
+                        onClick={() =>
+                          setQueue((current) => removeQueuedFile(current, item.id))
+                        }
+                        className="text-xs text-[#7a2e22] underline underline-offset-2 disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {queueNotice && <p className="mt-2 text-xs text-[#7c746a]">{queueNotice}</p>}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isProcessing || readyFiles.length === 0}
+                  onClick={processReadyFiles}
+                  className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isProcessing
+                    ? "Processing…"
+                    : `Process ${readyFiles.length} file${readyFiles.length === 1 ? "" : "s"}`}
+                </button>
+                {failedFiles.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={retryFailedFiles}
+                    className="rounded-full border border-[#1c1917] px-4 py-2 text-sm disabled:opacity-40"
+                  >
+                    Retry {failedFiles.length} failed file{failedFiles.length === 1 ? "" : "s"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => {
+                    setQueue([]);
+                    setQueueNotice(null);
+                  }}
+                  className="px-3 py-2 text-sm text-[#5c564e] disabled:opacity-40"
+                >
+                  Clear queue
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
         <section className="rounded-[1.5rem] bg-[#faf6ef] shadow-sm">
           <div className="relative flex flex-wrap items-center justify-between gap-3 px-5 py-4">
-            <p className="text-sm">
-              {label ?? "Arrange the output columns, then stage purchase orders below"}
-            </p>
+            <div>
+              <p className="text-xs font-semibold tracking-wide uppercase text-[#7c746a]">Step 3</p>
+              <p className="mt-1 text-sm">
+                {table.rows.length > 0
+                  ? `${label ?? "Review highlighted cells before exporting"}${completedFileCount > 0 ? ` · ${completedFileCount} PDF${completedFileCount === 1 ? "" : "s"} processed` : ""}`
+                  : "Your cleaned tracker rows will appear here after processing."}
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               {table.rows.length > 0 && (
                 <>
@@ -684,7 +856,7 @@ export function DemoApp() {
                       colSpan={columns.length}
                       className="border border-[#e6ddd0] px-4 py-8 text-center text-[#7c746a]"
                     >
-                      Process a purchase order to populate this table. You can already drag headers to arrange the output.
+                      Process a purchase order to populate this table. You can arrange these headers when you are ready.
                     </td>
                   </tr>
                 ) : (
@@ -737,110 +909,6 @@ export function DemoApp() {
             ))}
           </ul>
         )}
-
-        <section
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragOverFiles(true);
-          }}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-              setDragOverFiles(false);
-            }
-          }}
-          onDrop={(event) => {
-            event.preventDefault();
-            stageFiles(Array.from(event.dataTransfer.files));
-          }}
-          className={`rounded-[1.5rem] border-2 border-dashed p-5 transition ${
-            dragOverFiles
-              ? "border-[#1c1917] bg-[#ece4d6]"
-              : "border-[#c4b8a6] bg-[#faf6ef]"
-          }`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-serif text-xl">Stage purchase orders</h2>
-              <p className="mt-1 text-sm text-[#5c564e]">
-                Drop PDFs here or browse. Files wait for your approval before processing.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={pickFiles}
-              className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white"
-            >
-              Add PDFs
-            </button>
-          </div>
-
-          {queue.length > 0 && (
-            <>
-              <ul className="mt-4 divide-y divide-[#e6ddd0] rounded-xl border border-[#e6ddd0] bg-[#fffdf8]">
-                {queue.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{item.file.name}</p>
-                      <p className="text-xs text-[#7c746a]">{fileSize(item.file.size)}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs ${statusClass(item.status)}`}>
-                        {item.detail}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isProcessing || item.status === "processing"}
-                        onClick={() =>
-                          setQueue((current) => removeQueuedFile(current, item.id))
-                        }
-                        className="text-xs text-[#7a2e22] underline underline-offset-2 disabled:opacity-40"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              {queueNotice && <p className="mt-2 text-xs text-[#7c746a]">{queueNotice}</p>}
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isProcessing || readyFiles.length === 0}
-                  onClick={processReadyFiles}
-                  className="rounded-full bg-[#1c1917] px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {isProcessing
-                    ? "Processing…"
-                    : `Process ${readyFiles.length} file${readyFiles.length === 1 ? "" : "s"}`}
-                </button>
-                {failedFiles.length > 0 && (
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    onClick={retryFailedFiles}
-                    className="rounded-full border border-[#1c1917] px-4 py-2 text-sm disabled:opacity-40"
-                  >
-                    Retry {failedFiles.length} failed file{failedFiles.length === 1 ? "" : "s"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  disabled={isProcessing}
-                  onClick={() => {
-                    setQueue([]);
-                    setQueueNotice(null);
-                  }}
-                  className="px-3 py-2 text-sm text-[#5c564e] disabled:opacity-40"
-                >
-                  Clear queue
-                </button>
-              </div>
-            </>
-          )}
-        </section>
       </main>
 
       {toast && (
